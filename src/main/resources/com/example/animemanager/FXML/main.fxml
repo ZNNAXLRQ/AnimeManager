@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.canvas.Canvas?>
+<?import javafx.scene.control.Separator?>
+
+<BorderPane xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.example.animemanager.UI.Controller.MainController"
+            stylesheets="@../CSS/main.css"
+            styleClass="main-background">
+
+    <padding>
+        <Insets top="20" right="30" bottom="20" left="30"/>
+    </padding>
+
+    <top>
+        <Label text="Anime Score Evaluator" styleClass="title-label" BorderPane.alignment="CENTER"/>
+    </top>
+
+    <left>
+        <VBox spacing="15" styleClass="control-panel" alignment="CENTER_LEFT" prefWidth="280">
+            <padding>
+                <Insets top="25" right="20" bottom="25" left="20"/>
+            </padding>
+
+            <Label text="维度输入 (0-10)" styleClass="section-header"/>
+
+            <VBox spacing="12">
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="信息 (Information)" styleClass="input-label" prefWidth="120"/>
+                    <TextField fx:id="infoField" text="5.0" styleClass="score-input"/>
+                </HBox>
+
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="故事 (Story)" styleClass="input-label" prefWidth="120"/>
+                    <TextField fx:id="storyField" text="5.0" styleClass="score-input"/>
+                </HBox>
+
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="人物 (Character)" styleClass="input-label" prefWidth="120"/>
+                    <TextField fx:id="charField" text="5.0" styleClass="score-input"/>
+                </HBox>
+
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="视听 (Quality)" styleClass="input-label" prefWidth="120"/>
+                    <TextField fx:id="visualField" text="5.0" styleClass="score-input"/>
+                </HBox>
+
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="氛围 (Atmosphere)" styleClass="input-label" prefWidth="120"/>
+                    <TextField fx:id="atmosField" text="5.0" styleClass="score-input"/>
+                </HBox>
+
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="喜爱 (Love)" styleClass="input-label" prefWidth="120"/>
+                    <TextField fx:id="loveField" text="5.0" styleClass="score-input"/>
+                </HBox>
+            </VBox>
+
+            <Separator opacity="0.2"/>
+
+            <HBox spacing="10">
+                <Button text="重置" onAction="#resetToDefault" styleClass="reset-button" prefWidth="80"/>
+                <Button text="开始计算" onAction="#onCalculateClick" styleClass="calc-button" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+            </HBox>
+        </VBox>
+    </left>
+
+    <center>
+        <VBox spacing="10" alignment="TOP_CENTER">
+            <padding>
+                <Insets left="40"/>
+            </padding>
+
+            <!-- 在FXML中添加 -->
+            <VBox alignment="CENTER" spacing="5" styleClass="radar-container">
+                <Canvas fx:id="radarCanvas" width="400" height="400"/>
+                <Label text="评分雷达图" styleClass="radar-title"/>
+            </VBox>
+
+            <VBox alignment="CENTER" spacing="5" styleClass="result-box">
+                <Label text="综合评分" styleClass="result-title"/>
+                <Label fx:id="totalScoreLabel" text="0.0" styleClass="score-display"/>
+
+                <HBox spacing="15" alignment="CENTER">
+                    <Label fx:id="gradeLabel" text="---" styleClass="grade-display"/>
+                    <Label fx:id="commentLabel" text="---" styleClass="comment-display"/>
+                </HBox>
+
+                <Label fx:id="adviceLabel" text="建议: ---" styleClass="advice-display" wrapText="true"/>
+            </VBox>
+        </VBox>
+    </center>
+</BorderPane>

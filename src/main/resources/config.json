@@ -1,0 +1,10 @@
+{
+  "username": "config",
+  "anime_weights": {
+    "story":0.25,
+    "character":0.20,
+    "visual":0.20,
+    "atmosphere":0.20,
+    "love":0.15
+  }
+}
