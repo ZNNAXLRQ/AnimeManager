@@ -1,9 +1,12 @@
 package com.example.animemanager.Service;
 
 import com.example.animemanager.Util.JsonConfigUtil;
+import org.springframework.stereotype.Service;
+
 import java.util.HashMap;
 import java.util.Map;
 
+@Service
 public class ScoreCalculatorService {
 
     private static final double BASE_SCORE = 10.0; // 基础保底分

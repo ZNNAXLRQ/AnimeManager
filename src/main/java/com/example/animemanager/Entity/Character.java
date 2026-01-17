@@ -1,6 +1,7 @@
 package com.example.animemanager.Entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.ColumnDefault;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,4 +39,9 @@ public class Character {
 
     @ManyToMany(mappedBy = "characters")
     private List<Subject> subjects;
+
+    // 自定义数据
+    @Column(name = "like", nullable = false)
+    @ColumnDefault("0")
+    private Integer like;
 }

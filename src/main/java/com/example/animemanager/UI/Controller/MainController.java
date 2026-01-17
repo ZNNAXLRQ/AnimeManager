@@ -11,12 +11,18 @@ import javafx.scene.control.TextField;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
 
 import java.net.URL;
 import java.util.Map;
 import java.util.ResourceBundle;
 
+@Controller
 public class MainController implements Initializable {
+
+    @Autowired
+    private ScoreCalculatorService scoreCalculatorService;
 
     // 雷达图颜色常量
     private static final Color RADAR_GRID_COLOR = Color.web("#e2e8f0");
@@ -90,7 +96,7 @@ public class MainController implements Initializable {
             this.currentValues = values;
 
             // 1. 计算结果
-            Map<String, String> report = ScoreCalculatorService.AnimeReport(
+            Map<String, String> report = scoreCalculatorService.AnimeReport(
                     values[0], values[1], values[2], values[3], values[4], values[5]
             );
 
@@ -209,7 +215,7 @@ public class MainController implements Initializable {
         GraphicsContext gc = radarCanvas.getGraphicsContext2D();
         double val = currentValues[index];
         // 获取该维度的评价描述
-        String desc = ScoreCalculatorService.getScoreDescription(val);
+        String desc = scoreCalculatorService.getScoreDescription(val);
         String text = String.format("%s: %.1f\n[%s]", LABELS[index], val, desc);
 
         // 绘制Tooltip背景框
