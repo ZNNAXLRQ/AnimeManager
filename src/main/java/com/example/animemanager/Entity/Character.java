@@ -1,11 +1,12 @@
 package com.example.animemanager.Entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
 import org.hibernate.annotations.ColumnDefault;
 
-import java.util.ArrayList;
 import java.util.List;
 
+@Data
 @Entity
 @Table(name = "characters")
 public class Character {
@@ -41,7 +42,7 @@ public class Character {
     private List<Subject> subjects;
 
     // 自定义数据
-    @Column(name = "like", nullable = false)
+    @Column(name = "attitude", nullable = false)
     @ColumnDefault("0")
-    private Integer like;
+    private Integer attitude;
 }

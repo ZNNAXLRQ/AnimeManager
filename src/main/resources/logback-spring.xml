@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- 引入 Spring Boot 默认的日志配置 -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml" />
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- 引用 Spring Boot 默认的日志格式 -->
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <!-- 核心：强制设置字符集为 UTF-8 -->
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+    </root>
+</configuration>

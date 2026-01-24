@@ -2,7 +2,9 @@ package com.example.animemanager.Entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
+import lombok.Data;
 
+@Data
 @Embeddable
 public class Images {
     @Column(name = "small_image_url")

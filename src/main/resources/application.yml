@@ -25,3 +25,4 @@ logging:
     com.example.animemanager: INFO
     org.springframework: WARN
     org.hibernate: ERROR
+    com.example.animemanager.Service: DEBUG

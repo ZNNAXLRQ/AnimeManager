@@ -18,6 +18,8 @@ import java.net.URL;
 import java.util.Map;
 import java.util.ResourceBundle;
 
+import static com.example.animemanager.Main.startCollect;
+
 @Controller
 public class MainController implements Initializable {
 
@@ -84,6 +86,11 @@ public class MainController implements Initializable {
         atmosField.setText("5.0");
         loveField.setText("5.0");
         calculateAndUpdate();
+    }
+
+    @FXML
+    private void onSaveClick() {
+        startCollect();
     }
 
     private void calculateAndUpdate() {

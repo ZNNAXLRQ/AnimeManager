@@ -115,6 +115,25 @@
     -fx-effect: dropshadow(gaussian, rgba(102, 126, 234, 0.6), 15, 0, 0, 6);
 }
 
+.save-button {
+    -fx-background-color: linear-gradient(to right, #5fb6fb 0%, #f87fc8 100%);
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 14px; /* 减小字体 */
+    -fx-font-weight: 700;
+    -fx-background-radius: 10px; /* 减小圆角 */
+    -fx-padding: 10 20; /* 减小内边距 */
+    -fx-cursor: hand;
+    -fx-border-width: 0;
+    -fx-effect: dropshadow(gaussian, rgba(102, 126, 234, 0.4), 10, 0, 0, 4);
+    -fx-min-width: 120px; /* 最小宽度 */
+    -fx-pref-height: 40px; /* 固定高度 */
+}
+
+.save-button:hover {
+    -fx-background-color: linear-gradient(to right, #737ef1 0%, #f66ada 100%);
+    -fx-effect: dropshadow(gaussian, rgba(102, 126, 234, 0.6), 15, 0, 0, 6);
+}
+
 .reset-button {
     -fx-background-color: transparent;
     -fx-text-fill: #e53e3e;

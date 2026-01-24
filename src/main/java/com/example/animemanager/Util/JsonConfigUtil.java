@@ -54,4 +54,14 @@ public final class JsonConfigUtil {
         }
         return account;
     }
+
+    @SuppressWarnings("unchecked")
+    public static String readToken(String fileName) {
+        Map<String, Object> config = readConfig(fileName);
+        String token = (String) config.get("token");
+        if (token == null) {
+            throw new RuntimeException("为配置个人令牌: " + fileName);
+        }
+        return token;
+    }
 }

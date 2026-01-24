@@ -1,10 +1,12 @@
 package com.example.animemanager.Entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
 import org.hibernate.annotations.ColumnDefault;
 
 import java.util.Date;
 
+@Data
 @Entity
 @Table(name = "episodes")
 public class Episode {
@@ -25,9 +27,8 @@ public class Episode {
     @Column(name = "name_cn")
     private String nameCn;
 
-    @Temporal(TemporalType.DATE)
     @Column(name = "airdate")
-    private Date airdate;
+    private String airdate;
 
     @Column(name = "duration")
     private String duration;
@@ -37,7 +38,7 @@ public class Episode {
     private String description;
 
     // 自定义数据
-    @Column(name = "like", nullable = false)
+    @Column(name = "attitude", nullable = false)
     @ColumnDefault("0")
-    private Integer like;
+    private Integer attitude;
 }

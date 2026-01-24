@@ -1,7 +1,9 @@
 package com.example.animemanager.Entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
 
+@Data
 @Entity
 @Table(name = "infobox")
 public class Infobox {

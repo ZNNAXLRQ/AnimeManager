@@ -1,9 +1,11 @@
 package com.example.animemanager.Entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
 import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.Formula;
 
+@Data
 @Embeddable
 public class Rating {
     @Column(name = "rank")
@@ -48,6 +50,4 @@ public class Rating {
 
     @Formula("totalscore - score")
     private Double distance;
-
-    // Getters and setters
 }

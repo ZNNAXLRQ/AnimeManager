@@ -1,8 +1,10 @@
 package com.example.animemanager.Entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
 import org.hibernate.annotations.ColumnDefault;
 
+@Data
 @Entity
 @Table(name = "tags")
 public class Tag {
@@ -20,6 +22,4 @@ public class Tag {
     @Column(name = "count", nullable = false)
     @ColumnDefault("0")
     private Integer count;
-
-    // Getters and setters
 }

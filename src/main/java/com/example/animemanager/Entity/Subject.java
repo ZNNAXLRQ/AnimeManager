@@ -1,11 +1,13 @@
 package com.example.animemanager.Entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
 import org.hibernate.annotations.ColumnDefault;
 
 import java.util.Date;
 import java.util.List;
 
+@Data
 @Entity
 @Table(name = "subject")
 public class Subject {
@@ -19,9 +21,8 @@ public class Subject {
     @Column(name = "name_cn", nullable = false)
     private String nameCn;
 
-    @Temporal(TemporalType.DATE)
     @Column(name = "date")
-    private Date date;
+    private String date;
 
     @Column(name = "platform")
     private String platform;

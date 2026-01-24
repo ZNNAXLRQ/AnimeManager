@@ -1,4 +1,7 @@
 package com.example.animemanager.Repository;
 
-public interface InfoboxRepository {
+import com.example.animemanager.Entity.Infobox;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface InfoboxRepository extends JpaRepository<Infobox, Long> {
 }
