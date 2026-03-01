@@ -42,7 +42,7 @@ public class ScoreCalculatorService {
     }
 
     // 核心评分逻辑
-    private static double calculateTotalScore(double infoRaw, double storyRaw, double characterRaw, double visualRaw, double atmosphereRaw, double loveRaw) {
+    public static double calculateTotalScore(double infoRaw, double storyRaw, double characterRaw, double visualRaw, double atmosphereRaw, double loveRaw) {
         // 1. 分数矫正 (0-10)
         double info = correctScore(infoRaw);
         double story = correctScore(storyRaw);

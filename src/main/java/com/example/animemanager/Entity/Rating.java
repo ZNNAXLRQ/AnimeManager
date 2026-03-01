@@ -47,7 +47,4 @@ public class Rating {
     @Column(name = "totalscore", nullable = false)
     @ColumnDefault("0.0")
     private Double totalscore;
-
-    @Formula("totalscore - score")
-    private Double distance;
 }

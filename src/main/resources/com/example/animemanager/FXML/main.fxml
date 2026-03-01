@@ -1,101 +1,47 @@
 <?xml version="1.0" encoding="UTF-8"?>
-
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
 <?import javafx.geometry.Insets?>
-<?import javafx.scene.control.Label?>
-<?import javafx.scene.control.TextField?>
-<?import javafx.scene.control.Button?>
-<?import javafx.scene.layout.BorderPane?>
-<?import javafx.scene.layout.HBox?>
-<?import javafx.scene.layout.VBox?>
-<?import javafx.scene.canvas.Canvas?>
-<?import javafx.scene.control.Separator?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
 
 <BorderPane xmlns:fx="http://javafx.com/fxml"
             fx:controller="com.example.animemanager.UI.Controller.MainController"
             stylesheets="@../CSS/main.css"
             styleClass="main-background">
 
-    <padding>
-        <Insets top="20" right="30" bottom="20" left="30"/>
-    </padding>
-
-    <top>
-        <Label text="Anime Score Evaluator" styleClass="title-label" BorderPane.alignment="CENTER"/>
-    </top>
-
     <left>
-        <VBox spacing="15" styleClass="control-panel" alignment="CENTER_LEFT" prefWidth="280">
-            <padding>
-                <Insets top="25" right="20" bottom="25" left="20"/>
-            </padding>
+        <VBox spacing="20" styleClass="sidebar" prefWidth="240">
+            <padding><Insets top="30" right="20" bottom="30" left="20"/></padding>
+            <Label text="Anime Manager" styleClass="sidebar-title" wrapText="true"/>
 
-            <Label text="维度输入 (0-10)" styleClass="section-header"/>
+            <Separator/>
 
-            <VBox spacing="12">
-                <HBox alignment="CENTER_LEFT" spacing="10">
-                    <Label text="信息 (Information)" styleClass="input-label" prefWidth="120"/>
-                    <TextField fx:id="infoField" text="5.0" styleClass="score-input"/>
-                </HBox>
-
-                <HBox alignment="CENTER_LEFT" spacing="10">
-                    <Label text="故事 (Story)" styleClass="input-label" prefWidth="120"/>
-                    <TextField fx:id="storyField" text="5.0" styleClass="score-input"/>
-                </HBox>
-
-                <HBox alignment="CENTER_LEFT" spacing="10">
-                    <Label text="人物 (Character)" styleClass="input-label" prefWidth="120"/>
-                    <TextField fx:id="charField" text="5.0" styleClass="score-input"/>
-                </HBox>
-
-                <HBox alignment="CENTER_LEFT" spacing="10">
-                    <Label text="视听 (Quality)" styleClass="input-label" prefWidth="120"/>
-                    <TextField fx:id="visualField" text="5.0" styleClass="score-input"/>
-                </HBox>
-
-                <HBox alignment="CENTER_LEFT" spacing="10">
-                    <Label text="氛围 (Atmosphere)" styleClass="input-label" prefWidth="120"/>
-                    <TextField fx:id="atmosField" text="5.0" styleClass="score-input"/>
-                </HBox>
-
-                <HBox alignment="CENTER_LEFT" spacing="10">
-                    <Label text="喜爱 (Love)" styleClass="input-label" prefWidth="120"/>
-                    <TextField fx:id="loveField" text="5.0" styleClass="score-input"/>
-                </HBox>
-            </VBox>
-
-            <Separator opacity="0.2"/>
+            <Button onAction="#onUpdateDataClick" styleClass="sidebar-button" maxWidth="Infinity">
+                <graphic>
+                    <FontIcon iconLiteral="fas-sync-alt" iconSize="16" iconColor="white"/>
+                </graphic>
+                <text>   更新数据</text>  <!-- 留空格子保持图标和文字间距 -->
+            </Button>
 
             <VBox spacing="10">
-                <Button text="重置" onAction="#resetToDefault" styleClass="reset-button" prefHeight="30" maxWidth="Infinity"/>
-                <Button text="开始计算" onAction="#onCalculateClick" styleClass="calc-button" prefHeight="30" maxWidth="Infinity"/>
-                <Button text="数据更新" onAction="#onSaveClick" styleClass="save-button" prefHeight="30" maxWidth="Infinity"/>
+                <Label text="排序方式" styleClass="sidebar-subtitle"/>
+                <ComboBox fx:id="sortCombo" maxWidth="Infinity" styleClass="sort-combo"/>
+                <ToggleButton fx:id="ascDescToggle" text="顺序 (ASC)" maxWidth="Infinity" styleClass="sort-toggle"/>
             </VBox>
         </VBox>
     </left>
 
     <center>
-        <VBox spacing="10" alignment="TOP_CENTER">
-            <padding>
-                <Insets left="40"/>
-            </padding>
+        <VBox spacing="10">
+            <padding><Insets top="20" right="30" bottom="20" left="30"/></padding>
+            <HBox alignment="CENTER_LEFT" spacing="15">
+                <Label text="我的番剧库" styleClass="title-label"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <TextField fx:id="searchField" promptText="搜索番剧..." styleClass="search-field"/>  <!-- 新增搜索框 -->
+                <Label fx:id="statusLabel" text="就绪" styleClass="status-label"/>
+            </HBox>
 
-            <!-- 在FXML中添加 -->
-            <VBox alignment="CENTER" spacing="5" styleClass="radar-container">
-                <Canvas fx:id="radarCanvas" width="400" height="400"/>
-                <Label text="评分雷达图" styleClass="radar-title"/>
-            </VBox>
-
-            <VBox alignment="CENTER" spacing="5" styleClass="result-box">
-                <Label text="综合评分" styleClass="result-title"/>
-                <Label fx:id="totalScoreLabel" text="0.0" styleClass="score-display"/>
-
-                <HBox spacing="15" alignment="CENTER">
-                    <Label fx:id="gradeLabel" text="---" styleClass="grade-display"/>
-                    <Label fx:id="commentLabel" text="---" styleClass="comment-display"/>
-                </HBox>
-
-                <Label fx:id="adviceLabel" text="建议: ---" styleClass="advice-display" wrapText="true"/>
-            </VBox>
+            <ListView fx:id="subjectListView" VBox.vgrow="ALWAYS" styleClass="subject-list"/>
         </VBox>
     </center>
 </BorderPane>

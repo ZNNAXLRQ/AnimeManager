@@ -18,7 +18,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
@@ -111,6 +110,28 @@ public class DataImportService {
         // 添加接受JSON的header
         headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
         return headers;
+    }
+
+    public CompletableFuture<Void> startCollect() {
+        log.info("接收到数据导入请求，准备在后台线程池执行...");
+
+        // 使用类内部已配置好的 executor 线程池来执行
+        return CompletableFuture.runAsync(() -> {
+            try {
+                // 调用核心的数据导入方法
+                this.DataImport();
+            } catch (Exception e) {
+                log.error("后台数据导入过程中发生异常", e);
+                throw new RuntimeException(e);
+            }
+        }, this.executor).whenComplete((result, ex) -> {
+            // 任务执行完成后的回调处理
+            if (ex != null) {
+                log.error("!!! 数据导入任务失败: {}", ex.getMessage());
+            } else {
+                log.info("=== 数据导入任务已全部顺利完成 ===");
+            }
+        });
     }
 
     public void DataImport() {
@@ -206,18 +227,72 @@ public class DataImportService {
         long startTime = System.currentTimeMillis();
         try {
             log.info("开始处理 SubjectID: {}", subjectId);
-            ImportDTO data = fetchSubjectDataParallel(subjectId);
-            if (data != null && data.getSubjectJson() != null) {
-                importSingleAnimeData(data);
-                log.info("SubjectID: {} 处理成功", subjectId);
+
+            // 【核心优化点】：前置数据库校验
+            if (subjectRepository.existsById(subjectId)) {
+                // 如果已存在，仅拉取主条目并更新，大幅节省网络IO和休眠时间
+                log.info("动漫 {} 已存在，仅获取主数据进行更新", subjectId);
+                self.updateExistingAnime(subjectId); // 通过 self 调用以保证事务生效
             } else {
-                log.warn("SubjectID: {} 核心数据缺失，跳过", subjectId);
+                // 如果不存在，获取完整数据并插入
+                log.info("动漫 {} 不存在，准备获取完整数据", subjectId);
+                ImportDTO data = fetchSubjectDataParallel(subjectId);
+                if (data != null && data.getSubjectJson() != null) {
+                    self.importSingleAnimeData(data);
+                    log.info("SubjectID: {} 新增处理成功", subjectId);
+                } else {
+                    log.warn("SubjectID: {} 核心数据缺失，跳过", subjectId);
+                }
             }
         } catch (Exception e) {
             log.error("SubjectID: {} 处理失败: {}", subjectId, e.getMessage(), e);
         } finally {
             long duration = System.currentTimeMillis() - startTime;
             log.debug("Subject {} 处理耗时: {}ms", subjectId, duration);
+        }
+    }
+
+    @Transactional
+    public void updateExistingAnime(Long subjectId) throws Exception {
+        String host = "https://api.bgm.tv/v0";
+        HttpHeaders headers = createHeaders();
+
+        // 只请求主条目数据
+        String subjectJson = fetchJsonDataWithRetry(host + "/subjects/" + subjectId, headers, MAX_RETRIES);
+        if (subjectJson == null) {
+            log.warn("更新时获取 SubjectID: {} 主数据失败", subjectId);
+            return;
+        }
+
+        JsonNode subjectNode = objectMapper.readTree(subjectJson);
+        Subject subject = subjectRepository.findById(subjectId).orElse(null);
+
+        if (subject == null) {
+            return;
+        }
+
+        // 仅执行更新评分逻辑
+        JsonNode ratingNode = subjectNode.path("rating");
+        if (!ratingNode.isMissingNode() && !ratingNode.isEmpty()) {
+            Rating rating = subject.getRating();
+            if (rating == null) {
+                rating = new Rating();
+            }
+            rating.setRank(ratingNode.path("rank").asInt());
+            rating.setTotal(ratingNode.path("total").asInt(0));
+            rating.setScore(ratingNode.path("score").asDouble(0.0));
+            // 保留原有其他属性
+            rating.setInformation(rating.getInformation() != null ? rating.getInformation() : 0.0);
+            rating.setStory(rating.getStory() != null ? rating.getStory() : 0.0);
+            rating.setCharacter(rating.getCharacter() != null ? rating.getCharacter() : 0.0);
+            rating.setQuality(rating.getQuality() != null ? rating.getQuality() : 0.0);
+            rating.setAtmosphere(rating.getAtmosphere() != null ? rating.getAtmosphere() : 0.0);
+            rating.setLove(rating.getLove() != null ? rating.getLove() : 0.0);
+            rating.setTotalscore(rating.getTotalscore() != null ? rating.getTotalscore() : 0.0);
+
+            subject.setRating(rating);
+            subjectRepository.save(subject);
+            log.info("动漫 {} 评分更新成功", subjectId);
         }
     }
 
@@ -395,7 +470,7 @@ public class DataImportService {
 
                 // 指数退避
                 try {
-                    long sleepTime = 1000L * (1 << (attempt - 1)); // 1, 2, 4秒...
+                    long sleepTime = 1000L * (1L << (attempt - 1)); // 1, 2, 4秒...
                     log.debug("等待 {} 毫秒后重试", sleepTime);
                     Thread.sleep(sleepTime);
                 } catch (InterruptedException ie) {
@@ -431,56 +506,23 @@ public class DataImportService {
         long subjectId = tar.getSubjectId();
         JsonNode subjectNode = objectMapper.readTree(tar.getSubjectJson());
 
-        if (subjectRepository.existsById(subjectId)) {
-            log.info("动漫 {} 已存在，仅更新", subjectId);
-            Subject subject = subjectRepository.findById(subjectId).orElse(null);
-            if (subject == null) {
-                throw new IllegalArgumentException("未找到目标条目");
-            }
-
-            // 更新评分
-            JsonNode ratingNode = subjectNode.path("rating");
-            if (!ratingNode.isMissingNode() && !ratingNode.isEmpty()) {
-                Rating rating = new Rating();
-                rating.setRank(ratingNode.path("rank").asInt());
-                rating.setTotal(ratingNode.path("total").asInt(0));
-                rating.setScore(ratingNode.path("score").asDouble(0.0));
-                rating.setInformation(0.0);
-                rating.setStory(0.0);
-                rating.setCharacter(0.0);
-                rating.setQuality(0.0);
-                rating.setAtmosphere(0.0);
-                rating.setLove(0.0);
-                rating.setTotalscore(0.0);
-                subject.setRating(rating);
-            }
-
-            subjectRepository.save(subject);
-            return;
-        }
-
-        log.info("开始导入动漫ID: {}", subjectId);
-
+        log.info("开始导入新动漫ID: {}", subjectId);
         // 1. 批量解析并保存Person数据
         JsonNode personArray = objectMapper.readTree(tar.getPersonJson());
         List<Person> persons = parsePersons(personArray);
-
         // 2. 批量解析并保存Character数据
         JsonNode characterArray = objectMapper.readTree(tar.getCharacterJson());
         List<Character> characters = parseCharacters(characterArray, persons);
-
         // 3. 解析并保存Subject
         Subject subject = parseSubject(subjectNode, characters, persons);
-
         // 4. 批量解析并保存Episode
         JsonNode episodeData = objectMapper.readTree(tar.getEpisodeJson());
         saveEpisodes(episodeData.path("data"), subject);
-
         // 5. 批量保存Infobox
         saveInfoboxes(subjectNode.path("infobox"), subject);
-
-        log.info("完成导入动漫ID: {}", subjectId);
+        log.info("完成导入新动漫ID: {}", subjectId);
     }
+
 
     private List<Person> parsePersons(JsonNode personsNode) {
         List<Person> persons = new ArrayList<>();

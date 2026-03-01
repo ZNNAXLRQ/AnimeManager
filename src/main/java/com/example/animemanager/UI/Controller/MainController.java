@@ -1,256 +1,281 @@
 package com.example.animemanager.UI.Controller;
 
-import com.example.animemanager.Service.ScoreCalculatorService;
+import com.example.animemanager.Entity.Subject;
+import com.example.animemanager.Main;
+import com.example.animemanager.Service.DataImportService;
+import com.example.animemanager.Service.SubjectService;
+import org.kordamp.ikonli.javafx.FontIcon;
+import javafx.application.Platform;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
+import javafx.concurrent.Task;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.fxml.Initializable;
-import javafx.geometry.Point2D;
-import javafx.scene.canvas.Canvas;
-import javafx.scene.canvas.GraphicsContext;
-import javafx.scene.control.Label;
-import javafx.scene.control.TextField;
+import javafx.geometry.Pos;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
-import javafx.scene.text.TextAlignment;
+import javafx.stage.Stage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 
+import java.io.IOException;
 import java.net.URL;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.ResourceBundle;
-
-import static com.example.animemanager.Main.startCollect;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Controller
 public class MainController implements Initializable {
 
-    @Autowired
-    private ScoreCalculatorService scoreCalculatorService;
+    @FXML private ListView<Subject> subjectListView;
+    @FXML private ComboBox<String> sortCombo;
+    @FXML private ToggleButton ascDescToggle;
+    @FXML private Label statusLabel;
+    @FXML private TextField searchField;  // 新增搜索框
 
-    // 雷达图颜色常量
-    private static final Color RADAR_GRID_COLOR = Color.web("#e2e8f0");
-    private static final Color RADAR_AXIS_COLOR = Color.web("#cbd5e0");
-    private static final Color RADAR_LABEL_COLOR = Color.web("#4a5568");
-    private static final Color RADAR_DATA_FILL = Color.web("rgba(102, 126, 234, 0.3)");
-    private static final Color RADAR_DATA_STROKE = Color.web("#667eea");
-    private static final Color RADAR_DOT_FILL = Color.WHITE;
-    private static final Color RADAR_DOT_STROKE = Color.web("#667eea");
+    @Autowired private SubjectService subjectService;
+    @Autowired private DataImportService dataImportService;
 
-    @FXML private TextField infoField, storyField, charField, visualField, atmosField, loveField;
-    @FXML private Canvas radarCanvas;
-    @FXML private Label totalScoreLabel, gradeLabel, commentLabel, adviceLabel;
-
-    private final String[] LABELS = {"信息", "故事", "人物", "视听", "氛围", "喜爱"};
-    // 保存当前六个点的坐标，用于鼠标交互检测
-    private Point2D[] dataPoints = new Point2D[6];
-    private double[] currentValues = {5, 5, 5, 5, 5, 5};
+    private static final Map<String, Image> IMAGE_CACHE = new ConcurrentHashMap<>();
+    private final ObservableList<Subject> observableSubjects = FXCollections.observableArrayList();
+    private FilteredList<Subject> filteredSubjects;  // 新增过滤列表
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
-        setupInteractiveCanvas();
-        calculateAndUpdate(); // 初始绘制
+        setupSortControls();
+        setupListView();
+        setupSearch();  // 新增搜索绑定
+        loadSubjectsAsync(false);
     }
 
-    private void setupInteractiveCanvas() {
-        // 鼠标移动监听：实现悬停显示数值
-        radarCanvas.setOnMouseMoved(e -> {
-            boolean found = false;
-            for (int i = 0; i < 6; i++) {
-                if (dataPoints[i] != null) {
-                    double dist = dataPoints[i].distance(e.getX(), e.getY());
-                    if (dist < 15) { // 鼠标距离点15像素内触发
-                        drawRadarChart(currentValues); // 重绘清除旧tooltip
-                        drawTooltip(i, dataPoints[i].getX(), dataPoints[i].getY());
-                        found = true;
-                        break;
-                    }
-                }
+    private void setupSortControls() {
+        sortCombo.getItems().addAll("ID排序", "中文名排序", "Rank排序", "Bgm Score排序", "本地总分排序", "放送日期排序");
+        sortCombo.getSelectionModel().selectFirst();
+
+        sortCombo.setOnAction(e -> applySorting());
+        ascDescToggle.setOnAction(e -> {
+            ascDescToggle.setText(ascDescToggle.isSelected() ? "逆序 (DESC)" : "顺序 (ASC)");
+            applySorting();
+        });
+    }
+
+    private void setupSearch() {
+        // 创建过滤列表并绑定到 ListView
+        filteredSubjects = new FilteredList<>(observableSubjects, p -> true);
+        subjectListView.setItems(filteredSubjects);
+
+        searchField.textProperty().addListener((obs, oldVal, newVal) -> {
+            filteredSubjects.setPredicate(subject -> {
+                if (newVal == null || newVal.isEmpty()) return true;
+                String lower = newVal.toLowerCase();
+                String cnName = subject.getNameCn();
+                String name = subject.getName();
+                return (cnName != null && cnName.toLowerCase().contains(lower)) ||
+                        (name != null && name.toLowerCase().contains(lower));
+            });
+            // 更新状态栏显示数量
+            statusLabel.setText(filteredSubjects.size() + " 部番剧");
+        });
+    }
+
+    private void setupListView() {
+        // 注意：ListView 的 items 稍后会被 filteredSubjects 覆盖，此处不设置
+        subjectListView.setCellFactory(param -> new ListCell<Subject>() {
+            private HBox content;
+            private ImageView imageView;
+            private Label title, rankInfo, scoreInfo, dateInfo;
+            private HBox starBox;  // 新增星级容器
+
+            {
+                imageView = new ImageView();
+                imageView.setFitWidth(80);
+                imageView.setFitHeight(110);
+                imageView.setPreserveRatio(true);
+
+                title = new Label();
+                title.getStyleClass().add("list-title");
+                title.setWrapText(true);
+
+                dateInfo = new Label();
+                dateInfo.getStyleClass().add("list-info");
+
+                rankInfo = new Label();
+                rankInfo.getStyleClass().add("list-info");
+
+                scoreInfo = new Label();
+                scoreInfo.getStyleClass().add("list-score");
+
+                starBox = new HBox(2);  // 间距2
+                starBox.setAlignment(Pos.CENTER_RIGHT);
+
+                VBox centerBox = new VBox(5, title, dateInfo);
+                centerBox.setAlignment(Pos.CENTER_LEFT);
+                HBox.setHgrow(centerBox, Priority.ALWAYS);
+
+                VBox rightBox = new VBox(5, rankInfo, starBox, scoreInfo);  // 将星级插入中间
+                rightBox.setAlignment(Pos.CENTER_RIGHT);
+
+                content = new HBox(15, imageView, centerBox, rightBox);
+                content.setAlignment(Pos.CENTER_LEFT);
+                content.getStyleClass().add("list-cell-card");
             }
-            // 如果鼠标没有悬停在任何点上，保持纯净图表
-            if (!found) {
-                drawRadarChart(currentValues);
+
+            @Override
+            protected void updateItem(Subject subject, boolean empty) {
+                super.updateItem(subject, empty);
+                if (empty || subject == null) {
+                    setGraphic(null);
+                } else {
+                    title.setText(subject.getNameCn() != null && !subject.getNameCn().isEmpty() ? subject.getNameCn() : subject.getName());
+                    dateInfo.setText("放送: " + (subject.getDate() != null ? subject.getDate() : "未知"));
+
+                    String rank = (subject.getRating() != null && subject.getRating().getRank() != null) ? String.valueOf(subject.getRating().getRank()) : "--";
+                    rankInfo.setText("Rank: " + rank);
+
+                    String bgmScore = (subject.getRating() != null && subject.getRating().getScore() != null) ? String.valueOf(subject.getRating().getScore()) : "--";
+                    String localScore = (subject.getRating() != null && subject.getRating().getTotalscore() != null) ? String.format("%.1f", subject.getRating().getTotalscore()) : "--";
+                    scoreInfo.setText(String.format("BGM: %s | 本地: %s", bgmScore, localScore));
+
+                    // 星级显示
+                    starBox.getChildren().clear();
+                    double total = (subject.getRating() != null && subject.getRating().getTotalscore() != null) ? subject.getRating().getTotalscore() : 0;
+                    int fullStars = 0;
+                    if (total >= 105) {
+                        fullStars = 10;
+                    } else if (total >= 95) {
+                        fullStars = 9;
+                    } else if (total >= 85) {
+                        fullStars = 8;
+                    } else if (total >= 70) {
+                        fullStars = 7;
+                    } else if (total >= 60) {
+                        fullStars = 6;
+                    } else if (total >= 48) {
+                        fullStars = 5;
+                    } else if (total >= 32) {
+                        fullStars = 4;
+                    } else if (total >= 24) {
+                        fullStars = 3;
+                    } else if (total >= 19) {
+                       fullStars = 2;
+                    } else if (total >= 14) {
+                        fullStars = 1;
+                    } else {
+                        fullStars = 0;
+                    }
+                    for (int i = 0; i < 10; i++) {
+                        FontIcon star = new FontIcon();
+                        star.setIconLiteral(i < fullStars ? "fas-star" : "far-star");
+                        star.setIconSize(14);
+                        star.setIconColor(i < fullStars ? Color.GOLD : Color.LIGHTGRAY);
+                        starBox.getChildren().add(star);
+                    }
+
+                    // 图片缓存
+                    String imageUrl = null;
+                    if (subject.getImages() != null && subject.getImages().getGrid() != null) {
+                        imageUrl = subject.getImages().getGrid();
+                    }
+                    if (imageUrl != null) {
+                        if (IMAGE_CACHE.containsKey(imageUrl)) {
+                            imageView.setImage(IMAGE_CACHE.get(imageUrl));
+                        } else {
+                            Image poster = new Image(imageUrl, true);
+                            IMAGE_CACHE.put(imageUrl, poster);
+                            imageView.setImage(poster);
+                        }
+                    } else {
+                        imageView.setImage(null);
+                    }
+
+                    content.setOnMouseClicked(e -> openSubjectDetail(subject));
+                    setGraphic(content);
+                }
             }
         });
     }
 
-    @FXML
-    private void onCalculateClick() {
-        calculateAndUpdate();
+    private void loadSubjectsAsync(boolean forceUpdate) {
+        statusLabel.setText("加载中...");
+        CompletableFuture.supplyAsync(() -> {
+            if (forceUpdate) subjectService.clearCache();
+            return subjectService.getAllSubjects();
+        }).thenAccept(subjects -> Platform.runLater(() -> {
+            observableSubjects.setAll(subjects);
+            applySorting();  // 排序会作用在 observableSubjects 上，FilteredList 会自动更新
+            statusLabel.setText(filteredSubjects.size() + " 部番剧");
+        }));
+    }
+
+    private void applySorting() {
+        if (observableSubjects.isEmpty()) return;
+
+        String criteria = sortCombo.getValue();
+        boolean isDesc = ascDescToggle.isSelected();
+
+        Comparator<Subject> comparator = switch (criteria) {
+            case "中文名排序" -> Comparator.comparing(s -> s.getNameCn() != null ? s.getNameCn() : s.getName());
+            case "Rank排序" -> Comparator.comparing(s -> (s.getRating() != null && s.getRating().getRank() != null) ? s.getRating().getRank() : Integer.MAX_VALUE);
+            case "Bgm Score排序" -> Comparator.comparing(s -> (s.getRating() != null && s.getRating().getScore() != null) ? s.getRating().getScore() : -1.0);
+            case "本地总分排序" -> Comparator.comparing(s -> (s.getRating() != null && s.getRating().getTotalscore() != null) ? s.getRating().getTotalscore() : -1.0);
+            case "放送日期排序" -> Comparator.comparing(s -> s.getDate() != null ? s.getDate() : "");
+            default -> Comparator.comparing(Subject::getId);
+        };
+
+        if (isDesc) comparator = comparator.reversed();
+        FXCollections.sort(observableSubjects, comparator);
     }
 
     @FXML
-    private void resetToDefault() {
-        infoField.setText("5.0");
-        storyField.setText("5.0");
-        charField.setText("5.0");
-        visualField.setText("5.0");
-        atmosField.setText("5.0");
-        loveField.setText("5.0");
-        calculateAndUpdate();
+    private void onUpdateDataClick() {
+        statusLabel.setText("后台数据更新中...");
+        Task<Void> updateTask = new Task<>() {
+            @Override
+            protected Void call() throws Exception {
+                dataImportService.DataImport();
+                return null;
+            }
+        };
+
+        updateTask.setOnSucceeded(e -> {
+            statusLabel.setText("更新完成，正在刷新...");
+            loadSubjectsAsync(true);
+        });
+
+        updateTask.setOnFailed(e -> {
+            statusLabel.setText("更新失败!");
+            e.getSource().getException().printStackTrace();
+        });
+
+        Thread thread = new Thread(updateTask);
+        thread.setDaemon(true);
+        thread.start();
     }
 
-    @FXML
-    private void onSaveClick() {
-        startCollect();
-    }
-
-    private void calculateAndUpdate() {
+    private void openSubjectDetail(Subject subject) {
         try {
-            // 解析输入，限制在0-10之间
-            double[] values = {
-                    parseInput(infoField), parseInput(storyField), parseInput(charField),
-                    parseInput(visualField), parseInput(atmosField), parseInput(loveField)
-            };
-            this.currentValues = values;
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/example/animemanager/FXML/subject.fxml"));
+            loader.setControllerFactory(Main.getContext()::getBean);
+            Parent root = loader.load();
 
-            // 1. 计算结果
-            Map<String, String> report = scoreCalculatorService.AnimeReport(
-                    values[0], values[1], values[2], values[3], values[4], values[5]
-            );
+            SubjectController controller = loader.getController();
+            controller.initData(subject);
 
-            // 2. 更新下方UI文本
-            updateResultUI(report);
-
-            // 3. 绘制雷达图
-            drawRadarChart(values);
-
-        } catch (NumberFormatException e) {
-            // 可以加一个Alert提示用户输入数字
-            System.out.println("请输入有效的数字");
+            Stage stage = (Stage) subjectListView.getScene().getWindow();
+            stage.setScene(new Scene(root, 1200, 800));
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-    }
-
-    private double parseInput(TextField field) {
-        try {
-            double v = Double.parseDouble(field.getText());
-            return Math.max(0, Math.min(10, v));
-        } catch (Exception e) {
-            return 0.0;
-        }
-    }
-
-    private void updateResultUI(Map<String, String> report) {
-        totalScoreLabel.setText(report.get("totalScore"));
-        gradeLabel.setText(report.get("grade"));
-        commentLabel.setText(report.get("comment"));
-        adviceLabel.setText("建议: " + report.get("advice"));
-
-        double score = Double.parseDouble(report.get("totalScore"));
-        String colorHex = score >= 85 ? "#FFD700" : (score >= 60 ? "#69f0ae" : "#ff5252");
-        totalScoreLabel.setStyle("-fx-text-fill: " + colorHex + ";");
-    }
-
-    // --- 绘图逻辑 ---
-
-    private void drawRadarChart(double[] values) {
-        GraphicsContext gc = radarCanvas.getGraphicsContext2D();
-        double w = radarCanvas.getWidth();
-        double h = radarCanvas.getHeight();
-        double cx = w / 2;
-        double cy = h / 2;
-        double maxRadius = Math.min(w, h) / 2 - 50; // 留出更多边距给文字
-
-        gc.clearRect(0, 0, w, h);
-
-        // 1. 绘制网格背景
-        gc.setStroke(Color.web("#e2e8f0")); // 使用CSS中的颜色
-        gc.setLineWidth(1.0);
-        for (int i = 1; i <= 5; i++) {
-            double r = maxRadius * i / 5.0;
-            drawPolygon(gc, cx, cy, r, 6);
-        }
-
-        // 2. 绘制轴线和标签
-        gc.setFill(Color.web("#4a5568")); // 使用CSS中的颜色
-        gc.setTextAlign(TextAlignment.CENTER);
-        gc.setFont(new Font("Microsoft YaHei", 14));
-
-        for (int i = 0; i < 6; i++) {
-            double angle = Math.toRadians(i * 60 - 90);
-            double xEdge = cx + maxRadius * Math.cos(angle);
-            double yEdge = cy + maxRadius * Math.sin(angle);
-
-            // 轴线
-            gc.setStroke(Color.web("#cbd5e0")); // 使用CSS中的颜色
-            gc.strokeLine(cx, cy, xEdge, yEdge);
-
-            // 标签 (根据位置微调偏移量)
-            double textR = maxRadius + 25;
-            double tx = cx + textR * Math.cos(angle);
-            double ty = cy + textR * Math.sin(angle);
-            gc.fillText(LABELS[i], tx, ty + 5);
-        }
-
-        // 3. 计算数据点坐标并存储
-        double[] xPoints = new double[6];
-        double[] yPoints = new double[6];
-
-        for (int i = 0; i < 6; i++) {
-            double val = values[i] / 10.0;
-            double r = maxRadius * val;
-            double angle = Math.toRadians(i * 60 - 90);
-            xPoints[i] = cx + r * Math.cos(angle);
-            yPoints[i] = cy + r * Math.sin(angle);
-
-            // 存储坐标用于鼠标交互
-            dataPoints[i] = new Point2D(xPoints[i], yPoints[i]);
-        }
-
-        // 4. 绘制数据区域
-        gc.beginPath();
-        gc.moveTo(xPoints[0], yPoints[0]);
-        for(int i=1; i<6; i++) gc.lineTo(xPoints[i], yPoints[i]);
-        gc.closePath();
-
-        // 填充样式
-        gc.setFill(Color.web("rgba(102, 126, 234, 0.3)")); // 使用CSS中的颜色
-        gc.fill();
-        gc.setStroke(Color.web("#667eea")); // 使用CSS中的颜色
-        gc.setLineWidth(2); // 调整线宽以匹配CSS
-        gc.stroke();
-
-        // 绘制顶点圆点
-        gc.setFill(Color.WHITE);
-        gc.setStroke(Color.web("#667eea")); // 使用CSS中的颜色
-        gc.setLineWidth(2);
-        for(int i=0; i<6; i++) {
-            gc.fillOval(xPoints[i]-5, yPoints[i]-5, 10, 10);
-            gc.strokeOval(xPoints[i]-5, yPoints[i]-5, 10, 10);
-        }
-    }
-
-    private void drawTooltip(int index, double x, double y) {
-        GraphicsContext gc = radarCanvas.getGraphicsContext2D();
-        double val = currentValues[index];
-        // 获取该维度的评价描述
-        String desc = scoreCalculatorService.getScoreDescription(val);
-        String text = String.format("%s: %.1f\n[%s]", LABELS[index], val, desc);
-
-        // 绘制Tooltip背景框
-        gc.setFill(Color.web("rgba(0, 0, 0, 0.8)"));
-        double boxW = 100;
-        double boxH = 50;
-        // 智能调整位置防止出界
-        double drawX = x + 15;
-        double drawY = y - 25;
-        if (drawX + boxW > radarCanvas.getWidth()) drawX = x - 15 - boxW;
-
-        gc.fillRoundRect(drawX, drawY, boxW, boxH, 10, 10);
-
-        // 绘制文字
-        gc.setFill(Color.WHITE);
-        gc.setFont(new Font("Microsoft YaHei", 12));
-        gc.setTextAlign(TextAlignment.LEFT);
-        gc.fillText(text, drawX + 10, drawY + 20);
-    }
-
-    private void drawPolygon(GraphicsContext gc, double cx, double cy, double r, int sides) {
-        double[] xPoints = new double[sides];
-        double[] yPoints = new double[sides];
-        for (int i = 0; i < sides; i++) {
-            double angle = Math.toRadians(i * (360.0 / sides) - 90);
-            xPoints[i] = cx + r * Math.cos(angle);
-            yPoints[i] = cy + r * Math.sin(angle);
-        }
-        gc.strokePolygon(xPoints, yPoints, sides);
     }
 }
