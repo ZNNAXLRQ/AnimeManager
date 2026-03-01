@@ -28,88 +28,119 @@
     </top>
 
     <center>
-        <HBox spacing="30" styleClass="main-container">
-            <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+        <ScrollPane fitToWidth="true" fitToHeight="true" styleClass="edge-to-edge">
+            <HBox spacing="30" styleClass="main-container">
+                <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
 
-            <!-- 左侧信息区 -->
-            <VBox spacing="15" alignment="TOP_CENTER" HBox.hgrow="ALWAYS">
-                <HBox spacing="15">
-                    <ImageView fx:id="poster" fitWidth="120" fitHeight="160" preserveRatio="true"/>
-                    <VBox spacing="10">
-                        <Label fx:id="nameLabel" styleClass="detail-title" wrapText="true"/>
-                        <Label fx:id="originalNameLabel" styleClass="detail-subtitle" wrapText="true"/>
-                        <HBox spacing="10">
-                            <Label fx:id="epsLabel" styleClass="tag-label"/>
-                            <Label fx:id="dateLabel" styleClass="tag-label"/>
-                        </HBox>
+                <!-- 左侧信息区 -->
+                <VBox spacing="15" alignment="TOP_CENTER" HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS">
+                    <HBox spacing="15">
+                        <ImageView fx:id="poster" fitWidth="120" fitHeight="160" preserveRatio="true"/>
+                        <VBox spacing="10">
+                            <Label fx:id="nameLabel" styleClass="detail-title" wrapText="true"/>
+                            <Label fx:id="originalNameLabel" styleClass="detail-subtitle" wrapText="true"/>
+                            <HBox spacing="10">
+                                <Label fx:id="epsLabel" styleClass="tag-label"/>
+                                <Label fx:id="dateLabel" styleClass="tag-label"/>
+                            </HBox>
+                        </VBox>
+                    </HBox>
+                    <!-- 简介 -->
+                    <VBox prefHeight="200">
+                        <TextArea fx:id="summaryArea" wrapText="true" editable="false" styleClass="summary-area"/>
                     </VBox>
-                </HBox>
-                <Separator/>
-                <Label text="简介" styleClass="section-header"/>
-                <TextArea fx:id="summaryArea" wrapText="true" editable="false" VBox.vgrow="ALWAYS" styleClass="summary-area"/>
-            </VBox>
-
-            <Separator orientation="VERTICAL"/>
-
-            <!-- 右侧评分与雷达区 -->
-            <VBox spacing="10" prefWidth="560" alignment="TOP_CENTER">
-                <Label text="维度评分 (0-10)" styleClass="section-header"/>
-
-                <HBox spacing="20" alignment="CENTER">
-                    <!-- 评分输入区域：使用 TextField 替换 Spinner，并应用 score-input 样式 -->
-                    <GridPane hgap="8" vgap="5" alignment="CENTER">
-                        <Label text="信息(Information)" styleClass="input-label" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
-                        <TextField fx:id="infoField" alignment="CENTER" text="0.0" styleClass="score-input" prefWidth="60" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
-
-                        <Label text="故事(Story)" styleClass="input-label" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
-                        <TextField fx:id="storyField" alignment="CENTER" text="0.0" styleClass="score-input" prefWidth="60" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
-
-                        <Label text="角色(Character)" styleClass="input-label" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
-                        <TextField fx:id="characterField" alignment="CENTER" text="0.0" styleClass="score-input" prefWidth="60" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
-
-                        <Label text="视听(Quality)" styleClass="input-label" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
-                        <TextField fx:id="visualField" alignment="CENTER" text="0.0" styleClass="score-input" prefWidth="60" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
-
-                        <Label text="氛围(Atmosphere)" styleClass="input-label" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
-                        <TextField fx:id="atmosphereField" alignment="CENTER" text="0.0" styleClass="score-input" prefWidth="60" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
-
-                        <Label text="喜爱(Love)" styleClass="input-label" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
-                        <TextField fx:id="loveField" alignment="CENTER" text="0.0" styleClass="score-input" prefWidth="60" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
-                    </GridPane>
-
-                    <VBox alignment="CENTER" spacing="10" styleClass="result-box">
-                        <Label text="综合评分" styleClass="result-title"/>
-                        <Label fx:id="totalScoreLabel" text="0.0" styleClass="score-display"/>
-                        <HBox spacing="15" alignment="CENTER">
-                            <Label fx:id="gradeLabel" text="---" styleClass="grade-display"/>
-                            <Label fx:id="commentLabel" text="---" styleClass="comment-display"/>
-                        </HBox>
-                        <Label fx:id="adviceLabel" text="建议: ---" styleClass="advice-display" wrapText="true"/>
+                    <!-- TabPane 展示关联信息（添加样式类） -->
+                    <VBox alignment="TOP_CENTER" VBox.vgrow="ALWAYS">
+                        <TabPane tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS" styleClass="custom-tab-pane">
+                            <!-- 信息栏 Infobox -->
+                            <Tab text="信息栏">
+                                <ListView fx:id="infoboxListView" styleClass="rounded-list-view"/>
+                            </Tab>
+                            <!-- 标签 Tags -->
+                            <Tab text="标签">
+                                <VBox spacing="10">
+                                    <ListView fx:id="tagListView" VBox.vgrow="ALWAYS" styleClass="rounded-list-view"/>
+                                    <HBox spacing="5" HBox.hgrow="ALWAYS" alignment="CENTER_RIGHT">
+                                        <Button text="添加" onAction="#onAddTagClick" styleClass="tag-add-button"/>
+                                    </HBox>
+                                </VBox>
+                            </Tab>
+                            <!-- 角色 Characters -->
+                            <Tab text="角色">
+                                <ListView fx:id="characterListView" styleClass="rounded-list-view"/>
+                            </Tab>
+                            <!-- 制作人员 Persons -->
+                            <Tab text="制作人员">
+                                <ListView fx:id="personListView" styleClass="rounded-list-view"/>
+                            </Tab>
+                            <!-- 剧集 Episodes -->
+                            <Tab text="剧集">
+                                <ListView fx:id="episodeListView" styleClass="rounded-list-view"/>
+                            </Tab>
+                        </TabPane>
                     </VBox>
-                </HBox>
+                </VBox>
 
-                <!-- 操作按钮组（移除了随机按钮） -->
-                <HBox spacing="10" alignment="CENTER">
-                    <Button onAction="#resetToDefault" styleClass="secondary-button">
-                        <graphic><FontIcon iconLiteral="fas-undo-alt" iconSize="14" iconColor="#4a5568"/></graphic>
-                        重置
-                    </Button>
-                    <Button onAction="#onCalculateAndSaveClick" styleClass="calc-save-button">
-                        <graphic><FontIcon iconLiteral="fas-save" iconSize="14" iconColor="white"/></graphic>
-                        计算并保存
-                    </Button>
-                </HBox>
+                <Separator orientation="VERTICAL"/>
 
-                <Separator/>
+                <!-- 右侧区域：评价 + 雷达图（保持不变） -->
+                <VBox spacing="10" prefWidth="560" alignment="TOP_CENTER" VBox.vgrow="ALWAYS">
+                    <Label text="维度评分 (0-10)" styleClass="section-header"/>
 
-                <!-- 雷达图和结果卡片区域：增大Canvas，居中对齐 -->
-                <HBox spacing="20" alignment="CENTER">
-                    <VBox spacing="20" alignment="CENTER">
-                        <Label text="评分雷达图" styleClass="radar-title"/>
-                        <Canvas fx:id="radarCanvas" width="360" height="360"/>
-                    </VBox>
-                </HBox>
-            </VBox>
-        </HBox>
+                    <!-- 评分输入区 -->
+                    <HBox spacing="20" alignment="CENTER">
+                        <GridPane hgap="8" vgap="5" alignment="CENTER">
+                            <Label text="信息(Information)" styleClass="input-label" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                            <TextField fx:id="infoField" alignment="CENTER" text="0.0" styleClass="score-input" prefWidth="60" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                            <Label text="故事(Story)" styleClass="input-label" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                            <TextField fx:id="storyField" alignment="CENTER" text="0.0" styleClass="score-input" prefWidth="60" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                            <Label text="角色(Character)" styleClass="input-label" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                            <TextField fx:id="characterField" alignment="CENTER" text="0.0" styleClass="score-input" prefWidth="60" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+
+                            <Label text="视听(Quality)" styleClass="input-label" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                            <TextField fx:id="visualField" alignment="CENTER" text="0.0" styleClass="score-input" prefWidth="60" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+
+                            <Label text="氛围(Atmosphere)" styleClass="input-label" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                            <TextField fx:id="atmosphereField" alignment="CENTER" text="0.0" styleClass="score-input" prefWidth="60" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+
+                            <Label text="喜爱(Love)" styleClass="input-label" GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+                            <TextField fx:id="loveField" alignment="CENTER" text="0.0" styleClass="score-input" prefWidth="60" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+                        </GridPane>
+
+                        <VBox alignment="CENTER" spacing="10" styleClass="result-box">
+                            <Label text="综合评分" styleClass="result-title"/>
+                            <Label fx:id="totalScoreLabel" text="0.0" styleClass="score-display"/>
+                            <HBox spacing="15" alignment="CENTER">
+                                <Label fx:id="gradeLabel" text="---" styleClass="grade-display"/>
+                                <Label fx:id="commentLabel" text="---" styleClass="comment-display"/>
+                            </HBox>
+                            <Label fx:id="adviceLabel" text="建议: ---" styleClass="advice-display" wrapText="true"/>
+                        </VBox>
+                    </HBox>
+
+                    <!-- 操作按钮组 -->
+                    <HBox spacing="10" alignment="CENTER">
+                        <Button onAction="#resetToDefault" styleClass="secondary-button">
+                            <graphic><FontIcon iconLiteral="fas-undo-alt" iconSize="14" iconColor="#4a5568"/></graphic>
+                            重置
+                        </Button>
+                        <Button onAction="#onCalculateAndSaveClick" styleClass="calc-save-button">
+                            <graphic><FontIcon iconLiteral="fas-save" iconSize="14" iconColor="white"/></graphic>
+                            计算并保存
+                        </Button>
+                    </HBox>
+
+                    <!-- 雷达图 -->
+                    <HBox spacing="20" alignment="CENTER">
+                        <VBox spacing="20" alignment="CENTER">
+                            <Canvas fx:id="radarCanvas" width="320" height="320"/>
+                            <Label text="评分雷达图" styleClass="radar-title"/>
+                        </VBox>
+                    </HBox>
+                </VBox>
+            </HBox>
+        </ScrollPane>
     </center>
 </BorderPane>

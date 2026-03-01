@@ -16,7 +16,11 @@ import org.springframework.transaction.annotation.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.text.ParseException;
 import java.util.*;
 import java.util.concurrent.*;
@@ -48,6 +52,9 @@ public class DataImportService {
     private DataImportService self;
     private final Object SHARED_ENTITY_LOCK = new Object();
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;  // 用于执行 MERGE 操作
 
     @Autowired
     public DataImportService(
@@ -507,41 +514,154 @@ public class DataImportService {
         JsonNode subjectNode = objectMapper.readTree(tar.getSubjectJson());
 
         log.info("开始导入新动漫ID: {}", subjectId);
-        // 1. 批量解析并保存Person数据
+        Map<Long, Person> personMap = new HashMap<>();
+        List<Person> newPersons = new ArrayList<>();
+        // 1. 解析制作人员（/persons）
         JsonNode personArray = objectMapper.readTree(tar.getPersonJson());
-        List<Person> persons = parsePersons(personArray);
-        // 2. 批量解析并保存Character数据
+        parsePersons(personArray, personMap, newPersons);
+
+        // 新增：character 缓存和待新增列表
+        Map<Long, Character> characterMap = new HashMap<>();
+        List<Character> newCharacters = new ArrayList<>();
+
+        // 2. 解析角色及其声优（/characters）
         JsonNode characterArray = objectMapper.readTree(tar.getCharacterJson());
-        List<Character> characters = parseCharacters(characterArray, persons);
-        // 3. 解析并保存Subject
-        Subject subject = parseSubject(subjectNode, characters, persons);
-        // 4. 批量解析并保存Episode
+        parseCharacters(characterArray, personMap, newPersons, characterMap, newCharacters);
+
+        // 3. 使用 MERGE 原子化保存所有新增人员
+        if (!newPersons.isEmpty()) {
+            newPersons.sort(Comparator.comparing(Person::getId));
+            batchMergePersons(newPersons);
+            log.info("合并了 {} 个Person", newPersons.size());
+        }
+
+        // 4. 保存新增角色
+        if (!newCharacters.isEmpty()) {
+            characterRepository.saveAll(newCharacters);
+            log.info("保存了 {} 个新Character", newCharacters.size());
+        }
+
+        // 5. 解析并保存主条目（传入全部角色列表和全部人员列表）
+        List<Character> allCharacters = new ArrayList<>(characterMap.values());
+        Subject subject = parseSubject(subjectNode, allCharacters, new ArrayList<>(personMap.values()));
+
+        // 6. 保存剧集和Infobox
         JsonNode episodeData = objectMapper.readTree(tar.getEpisodeJson());
         saveEpisodes(episodeData.path("data"), subject);
-        // 5. 批量保存Infobox
         saveInfoboxes(subjectNode.path("infobox"), subject);
         log.info("完成导入新动漫ID: {}", subjectId);
     }
 
+    /**
+     * 使用 H2 的 MERGE 语句批量插入或忽略人员，并同步更新 careers 表。
+     * 此操作是原子的，可彻底避免并发插入时的主键冲突。
+     */
+    private void batchMergePersons(List<Person> persons) {
+        String sql = "MERGE INTO persons (person_id, name, short_summary, person_type, locked, " +
+                "small_image_url, grid_image_url, large_image_url, medium_image_url, common_image_url) " +
+                "KEY(person_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
+            @Override
+            public void setValues(PreparedStatement ps, int i) throws SQLException {
+                Person p = persons.get(i);
+                Images images = p.getImages();
+                ps.setLong(1, p.getId());
+                ps.setString(2, p.getName());
+                ps.setString(3, p.getShortSummary());
+                ps.setInt(4, p.getType());
+                ps.setBoolean(5, p.getLocked());
+                ps.setString(6, images != null ? images.getSmall() : null);
+                ps.setString(7, images != null ? images.getGrid() : null);
+                ps.setString(8, images != null ? images.getLarge() : null);
+                ps.setString(9, images != null ? images.getMedium() : null);
+                ps.setString(10, images != null ? images.getCommon() : null);
+            }
+            @Override
+            public int getBatchSize() {
+                return persons.size();
+            }
+        });
 
-    private List<Person> parsePersons(JsonNode personsNode) {
-        List<Person> persons = new ArrayList<>();
+        // 处理 careers (person_careers 表)
+        String deleteCareersSql = "DELETE FROM person_careers WHERE person_id = ?";
+        String insertCareersSql = "INSERT INTO person_careers (person_id, career) VALUES (?, ?)";
+        for (Person p : persons) {
+            jdbcTemplate.update(deleteCareersSql, p.getId());
+            List<String> careers = p.getCareers();
+            if (careers != null && !careers.isEmpty()) {
+                List<Object[]> batchArgs = new ArrayList<>();
+                for (String career : careers) {
+                    batchArgs.add(new Object[]{p.getId(), career});
+                }
+                jdbcTemplate.batchUpdate(insertCareersSql, batchArgs);
+            }
+        }
+    }
+
+    /**
+     * 使用 H2 的 MERGE 语句批量插入或忽略角色，并同步更新 casts 关联表。
+     * 若后续出现角色主键冲突，可调用此方法替换 characterRepository.saveAll()。
+     */
+    private void batchMergeCharacters(List<Character> characters) {
+        String sql = "MERGE INTO characters (character_id, name, summary, relation, type, attitude, " +
+                "small_image_url, grid_image_url, large_image_url, medium_image_url, common_image_url) " +
+                "KEY(character_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
+            @Override
+            public void setValues(PreparedStatement ps, int i) throws SQLException {
+                Character c = characters.get(i);
+                Images images = c.getImages();
+                ps.setLong(1, c.getId());
+                ps.setString(2, c.getName());
+                ps.setString(3, c.getSummary());
+                ps.setString(4, c.getRelation());
+                ps.setInt(5, c.getType());
+                ps.setInt(6, c.getAttitude());
+                ps.setString(7, images != null ? images.getSmall() : null);
+                ps.setString(8, images != null ? images.getGrid() : null);
+                ps.setString(9, images != null ? images.getLarge() : null);
+                ps.setString(10, images != null ? images.getMedium() : null);
+                ps.setString(11, images != null ? images.getCommon() : null);
+            }
+            @Override
+            public int getBatchSize() {
+                return characters.size();
+            }
+        });
+
+        // 处理 casts (character_cast 表)
+        String deleteCastsSql = "DELETE FROM character_cast WHERE character_id = ?";
+        String insertCastsSql = "INSERT INTO character_cast (character_id, person_id) VALUES (?, ?)";
+        for (Character c : characters) {
+            jdbcTemplate.update(deleteCastsSql, c.getId());
+            List<Person> casts = c.getCasts();
+            if (casts != null && !casts.isEmpty()) {
+                List<Object[]> batchArgs = new ArrayList<>();
+                for (Person person : casts) {
+                    batchArgs.add(new Object[]{c.getId(), person.getId()});
+                }
+                jdbcTemplate.batchUpdate(insertCastsSql, batchArgs);
+            }
+        }
+    }
+
+    private void parsePersons(JsonNode personsNode, Map<Long, Person> personMap, List<Person> newPersons) {
         if (personsNode.isArray()) {
             for (JsonNode personNode : personsNode) {
-                Person person = parseSinglePerson(personNode);
-                if (!personRepository.existsById(person.getId())) {
-                    persons.add(person);
-                }
-            }
-            // 批量保存
-            if (!persons.isEmpty()) {
-                synchronized (SHARED_ENTITY_LOCK) {
-                    // 调用 self 代理对象的方法以触发事务
-                    self.savePersonsSafe(persons);
+                long id = personNode.path("id").asLong();
+                if (personMap.containsKey(id)) continue; // 已缓存，跳过
+
+                // 查询数据库
+                Optional<Person> existing = personRepository.findById(id);
+                if (existing.isPresent()) {
+                    personMap.put(id, existing.get()); // 使用托管实体
+                } else {
+                    Person person = parseSinglePerson(personNode);
+                    personMap.put(id, person);
+                    newPersons.add(person); // 待新增
                 }
             }
         }
-        return persons;
     }
 
     private Person parseSinglePerson(JsonNode personNode) {
@@ -588,74 +708,70 @@ public class DataImportService {
         }
     }
 
-    private List<Character> parseCharacters(JsonNode charactersNode, List<Person> persons) throws ParseException {
-        List<Character> characters = new ArrayList<>();
+    private void parseCharacters(JsonNode charactersNode, Map<Long, Person> personMap, List<Person> newPersons,
+                                 Map<Long, Character> characterMap, List<Character> newCharacters) throws ParseException {
         if (charactersNode.isArray()) {
-            Set<Long> existingPersonIds = persons.stream()
-                    .map(Person::getId)
-                    .collect(Collectors.toSet());
-
-            List<Person> newPersonsToSave = new ArrayList<>();
             for (JsonNode characterNode : charactersNode) {
-                Character character = new Character();
-                character.setId(characterNode.path("id").asLong());
-                character.setName(characterNode.path("name").asText());
-                character.setSummary(characterNode.path("summary").asText());
-                character.setRelation(characterNode.path("relation").asText());
-                character.setType(characterNode.path("type").asInt(0));
-                character.setAttitude(0);
+                long id = characterNode.path("id").asLong();
+                // 如果已经缓存，跳过
+                if (characterMap.containsKey(id)) continue;
 
-                JsonNode imagesNode = characterNode.path("images");
-                if (!imagesNode.isMissingNode() && !imagesNode.isEmpty()) {
-                    Images images = new Images();
-                    images.setSmall(imagesNode.path("small").asText());
-                    images.setGrid(imagesNode.path("grid").asText());
-                    images.setLarge(imagesNode.path("large").asText());
-                    images.setMedium(imagesNode.path("medium").asText());
-                    character.setImages(images);
+                Character character;
+                // 查询数据库是否已存在
+                Optional<Character> existing = characterRepository.findById(id);
+                if (existing.isPresent()) {
+                    character = existing.get(); // 使用托管实体
+                    // 注意：如果需要对已存在的角色更新某些字段（如 relation, type, summary），可以在这里更新
+                    // 但目前 API 返回的角色信息可能不会变化，所以可以忽略更新，保持已有数据
+                } else {
+                    character = new Character();
+                    character.setId(id);
+                    character.setName(characterNode.path("name").asText());
+                    character.setSummary(characterNode.path("summary").asText());
+                    character.setRelation(characterNode.path("relation").asText());
+                    character.setType(characterNode.path("type").asInt(0));
+                    character.setAttitude(0); // 默认态度
+
+                    // 设置图片
+                    JsonNode imagesNode = characterNode.path("images");
+                    if (!imagesNode.isMissingNode() && !imagesNode.isEmpty()) {
+                        Images images = new Images();
+                        images.setSmall(imagesNode.path("small").asText());
+                        images.setGrid(imagesNode.path("grid").asText());
+                        images.setLarge(imagesNode.path("large").asText());
+                        images.setMedium(imagesNode.path("medium").asText());
+                        character.setImages(images);
+                    }
+                    newCharacters.add(character);
                 }
 
+                // 处理声优（actors）- 需要设置到 character 中，无论是新角色还是已存在角色，都要更新声优列表
                 JsonNode actorsNode = characterNode.path("actors");
                 if (actorsNode.isArray()) {
                     List<Person> casts = new ArrayList<>();
                     for (JsonNode actorNode : actorsNode) {
                         long actorId = actorNode.path("id").asLong();
-                        Person person = persons.stream()
-                                .filter(p -> p.getId().equals(actorId))
-                                .findFirst()
-                                .orElse(null);
-
-                        if (person == null && !existingPersonIds.contains(actorId)) {
-                            person = parseSinglePerson(actorNode);
-                            existingPersonIds.add(actorId);
-                            persons.add(person);
-                            newPersonsToSave.add(person);
+                        Person person = personMap.get(actorId);
+                        if (person == null) {
+                            // 缓存未命中，查询数据库
+                            Optional<Person> existingPerson = personRepository.findById(actorId);
+                            if (existingPerson.isPresent()) {
+                                person = existingPerson.get();
+                                personMap.put(actorId, person);
+                            } else {
+                                person = parseSinglePerson(actorNode);
+                                personMap.put(actorId, person);
+                                newPersons.add(person);
+                            }
                         }
-
-                        if (person != null) {
-                            casts.add(person);
-                        }
+                        casts.add(person);
                     }
                     character.setCasts(casts);
                 }
-                if (!characterRepository.existsById(character.getId())) {
-                    characters.add(character);
-                }
-            }
 
-            // 批量保存
-            synchronized (SHARED_ENTITY_LOCK) {
-                // 1. 先安全保存新发现的声优 (Person)
-                if (!newPersonsToSave.isEmpty()) {
-                    self.savePersonsSafe(newPersonsToSave);
-                }
-                // 2. 再安全保存角色 (Character)
-                if (!characters.isEmpty()) {
-                    self.saveCharactersSafe(characters);
-                }
+                characterMap.put(id, character);
             }
         }
-        return characters;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<VBox xmlns:fx="http://javafx.com/fxml"
+      fx:controller="com.example.animemanager.UI.Controller.TagManagementController"
+      stylesheets="@../CSS/tag_management.css"
+      styleClass="tag-management-root"
+      spacing="10" alignment="CENTER" prefWidth="400" prefHeight="500"
+      style="-fx-padding: 15; -fx-background-color: #f9fafc;">
+    <padding><Insets top="15" right="15" bottom="15" left="15"/></padding>
+
+    <Label text="标签管理" styleClass="tag-management-title"/>
+
+    <HBox spacing="5">
+        <TextField fx:id="searchField" promptText="搜索标签..." HBox.hgrow="ALWAYS" styleClass="tag-input-field"/>
+    </HBox>
+
+    <ListView fx:id="tagListView" VBox.vgrow="ALWAYS" styleClass="rounded-list-view"/>
+
+    <HBox spacing="5">
+        <TextField fx:id="newTagField" promptText="新标签名称..." HBox.hgrow="ALWAYS" styleClass="tag-input-field"/>
+        <Button fx:id="addButton" text="添加" styleClass="tag-add-button"/>
+    </HBox>
+
+    <HBox spacing="10" alignment="CENTER">
+        <Button fx:id="clearAllButton" text="清除所有" styleClass="secondary-button"/>
+        <Button fx:id="editButton" text="编辑" styleClass="secondary-button"/>
+        <Button fx:id="deleteButton" text="删除" styleClass="secondary-button"/>
+        <Button fx:id="saveButton" text="保存" styleClass="calc-save-button"/>
+        <Button fx:id="cancelButton" text="取消" styleClass="secondary-button"/>
+    </HBox>
+</VBox>

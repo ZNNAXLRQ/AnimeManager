@@ -196,3 +196,145 @@
     -fx-background-color: transparent;
     -fx-shape: "";
 }
+
+.edge-to-edge {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.edge-to-edge .viewport {
+    -fx-background-color: transparent;
+}
+
+.scroll-pane.edge-to-edge {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+}
+
+/* ========== TabPane 美化（调整后）========== */
+.custom-tab-pane {
+    -fx-tab-min-height: 28px;
+    -fx-tab-min-width: 70px;
+    -fx-tab-max-width: 70px;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.custom-tab-pane .tab-header-area {
+    -fx-padding: 4px 0 0 0;
+    -fx-background-color: transparent;
+}
+
+.custom-tab-pane .tab-header-background {
+    -fx-background-color: transparent;
+}
+
+.custom-tab-pane .tab {
+    -fx-background-color: #edf2f7;
+    -fx-background-radius: 16px 16px 0 0;
+    -fx-padding: 4px 12px;
+    -fx-border-width: 0;
+    -fx-cursor: hand;
+}
+
+.custom-tab-pane .tab:hover {
+    -fx-background-color: #e2e8f0;
+}
+
+.custom-tab-pane .tab:selected {
+    -fx-background-color: #667eea;
+}
+
+.custom-tab-pane .tab .tab-label {
+    -fx-effect: none;
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #4a5568;
+}
+
+.custom-tab-pane .tab:selected .tab-label {
+    -fx-text-fill: white;
+}
+
+.custom-tab-pane .tab-content-area {
+    -fx-background-color: #f9fafc;
+    -fx-background-radius: 0 12px 12px 12px;
+    -fx-border-color: #e2e8f0;
+    -fx-border-width: 2px;
+    -fx-border-radius: 0 12px 12px 12px;
+    -fx-padding: 15px;
+}
+
+/* ========== ListView 美化（修复空行问题）========== */
+.rounded-list-view {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+}
+
+.rounded-list-view .list-cell {
+    -fx-background-color: white;
+    -fx-background-radius: 8px;
+    -fx-padding: 8px 12px;
+    -fx-border-width: 0 0 1px 0;
+    -fx-border-color: #e2e8f0;
+}
+
+.rounded-list-view .list-cell:hover {
+    -fx-background-color: #f1f4f9;
+}
+
+.rounded-list-view .placeholder {
+    -fx-background-color: transparent;
+}
+
+.rounded-list-view .scroll-bar:vertical {
+    -fx-pref-width: 10px;
+}
+
+.rounded-list-view .list-cell:selected {
+    -fx-background-color: #667eea;   /* 自定义选中背景色 */
+    -fx-text-fill: white;            /* 自定义选中文字颜色（此处仍设为白色） */
+    -fx-effect: none;                /* 移除可能的光晕效果 */
+}
+
+/* 列表单元中的按钮样式（如果用到） */
+.list-cell .toggle-button {
+    -fx-background-color: transparent;
+    -fx-font-size: 16px;
+    -fx-padding: 4px 8px;
+    -fx-text-fill: #718096;
+    -fx-cursor: hand;
+}
+
+.list-cell .toggle-button:selected {
+    -fx-text-fill: #667eea;
+    -fx-background-color: #e6eaff;
+    -fx-background-radius: 20px;
+}
+
+/* 标签输入区域样式 */
+.tag-input-field {
+    -fx-background-color: white;
+    -fx-background-radius: 20px;
+    -fx-border-color: #e2e8f0;
+    -fx-border-radius: 20px;
+    -fx-padding: 8px 15px;
+}
+
+.tag-add-button {
+    -fx-background-color: #667eea;
+    -fx-text-fill: white;
+    -fx-background-radius: 20px;
+    -fx-padding: 8px 20px;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.tag-add-button:hover {
+    -fx-background-color: #5a67d8;
+}

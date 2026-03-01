@@ -60,8 +60,14 @@ public class Subject {
 
     @Embedded
     private Rating rating;
-    @OneToMany(mappedBy = "subject", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Tag> tags;
+
+    @ManyToMany
+    @JoinTable(
+            name = "subject_tags",  // 中间表名
+            joinColumns = @JoinColumn(name = "subject_id"),
+            inverseJoinColumns = @JoinColumn(name = "tag_id")
+    )
+    private List<Tag> tags;  // 改为多对多
 
     @OneToMany(mappedBy = "subject", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Infobox> infobox;

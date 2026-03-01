@@ -1,0 +1,140 @@
+/* tag-management.css - 标签管理窗口专用样式，与 main.css 风格一致 */
+
+.root {
+    -fx-font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+/* 根容器背景与内边距（原内联样式移至此） */
+.tag-management-root {
+    -fx-background-color: #f9fafc;
+    -fx-padding: 15;
+    -fx-spacing: 10;
+    -fx-alignment: center;
+}
+
+/* 标题样式 */
+.tag-management-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #4a5568;
+}
+
+/* 输入框（搜索、新标签）统一风格 */
+.tag-input-field {
+    -fx-background-color: white;
+    -fx-background-radius: 30px;
+    -fx-padding: 8 15;
+    -fx-border-color: #e2e8f0;
+    -fx-border-radius: 30px;
+    -fx-font-size: 14px;
+    -fx-prompt-text-fill: #a0aec0;
+}
+.tag-input-field:focused {
+    -fx-border-color: #667eea;
+    -fx-effect: dropshadow(gaussian, rgba(102,126,234,0.3), 10, 0, 0, 2);
+}
+
+/* ListView 样式（圆角卡片风格） */
+.rounded-list-view {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+}
+.rounded-list-view .list-cell {
+    -fx-background-color: white;
+    -fx-background-radius: 8px;
+    -fx-padding: 8 12;
+    -fx-border-width: 0 0 1px 0;
+    -fx-border-color: #e2e8f0;
+}
+
+.rounded-list-view .list-cell:hover {
+    -fx-background-color: #f1f4f9;
+}
+.rounded-list-view .list-cell:selected {
+    -fx-background-color: #e6eaff;  /* 选中时的浅紫色背景 */
+}
+.rounded-list-view .scroll-bar:vertical {
+    -fx-pref-width: 10px;
+}
+
+/* 添加标签按钮（主紫色） */
+.tag-add-button {
+    -fx-background-color: #667eea;
+    -fx-text-fill: white;
+    -fx-background-radius: 20px;
+    -fx-padding: 8 20;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+.tag-add-button:hover {
+    -fx-background-color: #5a67d8;
+}
+
+/* 次要按钮（灰色） */
+.secondary-button {
+    -fx-background-color: #edf2f7;
+    -fx-text-fill: #4a5568;
+    -fx-background-radius: 30px;
+    -fx-padding: 8 20;
+    -fx-font-size: 14px;
+    -fx-cursor: hand;
+}
+.secondary-button:hover {
+    -fx-background-color: #e2e8f0;
+}
+
+/* 保存按钮（渐变） */
+.calc-save-button {
+    -fx-background-color: linear-gradient(to bottom, #667eea, #764ba2);
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-background-radius: 30px;
+    -fx-padding: 8 20;
+    -fx-font-size: 14px;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(102,126,234,0.4), 15, 0, 0, 4);
+}
+.calc-save-button:hover {
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+
+/* 清除所有按钮（复用 secondary-button 即可，无需额外定义） */
+
+/* 高对比度滚动条（与 main.css 一致） */
+.scroll-bar:vertical,
+.scroll-bar:horizontal {
+    -fx-background-color: transparent;
+    -fx-pref-width: 12px;
+    -fx-pref-height: 12px;
+}
+.scroll-bar:vertical .track,
+.scroll-bar:horizontal .track {
+    -fx-background-color: #e2e8f0;
+    -fx-background-radius: 6px;
+    -fx-background-insets: 2px;
+}
+.scroll-bar:vertical .thumb,
+.scroll-bar:horizontal .thumb {
+    -fx-background-color: #64748b;
+    -fx-background-radius: 6px;
+    -fx-background-insets: 2px;
+}
+.scroll-bar:vertical .thumb:hover,
+.scroll-bar:horizontal .thumb:hover {
+    -fx-background-color: #475569;
+}
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow {
+    -fx-background-color: transparent;
+    -fx-shape: "";
+}
