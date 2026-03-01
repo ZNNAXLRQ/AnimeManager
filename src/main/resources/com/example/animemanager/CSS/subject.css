@@ -156,3 +156,43 @@
     -fx-text-fill: #718096;
     -fx-font-weight: bold;
 }
+
+/* ========== 高对比度滚动条 ========== */
+.scroll-bar:vertical,
+.scroll-bar:horizontal {
+    -fx-background-color: transparent;
+    -fx-pref-width: 12px;
+    -fx-pref-height: 12px;
+}
+
+.scroll-bar:vertical .track,
+.scroll-bar:horizontal .track {
+    -fx-background-color: #e2e8f0;      /* 浅灰轨道 */
+    -fx-background-radius: 6px;
+    -fx-background-insets: 2px;
+}
+
+.scroll-bar:vertical .thumb,
+.scroll-bar:horizontal .thumb {
+    -fx-background-color: #64748b;      /* 深灰色滑块，与轨道形成明显对比 */
+    -fx-background-radius: 6px;
+    -fx-background-insets: 2px;
+}
+
+.scroll-bar:vertical .thumb:hover,
+.scroll-bar:horizontal .thumb:hover {
+    -fx-background-color: #475569;      /* 悬停时更深 */
+}
+
+/* 隐藏按钮 */
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow {
+    -fx-background-color: transparent;
+    -fx-shape: "";
+}
