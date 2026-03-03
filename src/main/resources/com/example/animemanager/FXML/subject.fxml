@@ -37,8 +37,8 @@
                     <HBox spacing="15">
                         <ImageView fx:id="poster" fitWidth="120" fitHeight="160" preserveRatio="true"/>
                         <VBox spacing="10">
-                            <Label fx:id="nameLabel" styleClass="detail-title" wrapText="true"/>
-                            <Label fx:id="originalNameLabel" styleClass="detail-subtitle" wrapText="true"/>
+                            <Label fx:id="nameLabel" styleClass="detail-title" wrapText="true" maxWidth="450"/>
+                            <Label fx:id="originalNameLabel" styleClass="detail-subtitle" wrapText="true" maxWidth="450"/>
                             <HBox spacing="10">
                                 <Label fx:id="epsLabel" styleClass="tag-label"/>
                                 <Label fx:id="dateLabel" styleClass="tag-label"/>

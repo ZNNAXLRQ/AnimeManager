@@ -3,6 +3,7 @@ package com.example.animemanager.UI.Controller;
 import com.example.animemanager.Entity.Subject;
 import com.example.animemanager.Main;
 import com.example.animemanager.Service.DataImportService;
+import com.example.animemanager.Service.FilterService;
 import com.example.animemanager.Service.SubjectService;
 import org.kordamp.ikonli.javafx.FontIcon;
 import javafx.application.Platform;
@@ -42,10 +43,13 @@ public class MainController implements Initializable {
     @FXML private ComboBox<String> sortCombo;
     @FXML private ToggleButton ascDescToggle;
     @FXML private Label statusLabel;
-    @FXML private TextField searchField;  // 新增搜索框
+    @FXML private TextField searchField;
+    @FXML private ComboBox<String> filterTypeCombo;
+    @FXML private TextField filterInput;
 
     @Autowired private SubjectService subjectService;
     @Autowired private DataImportService dataImportService;
+    @Autowired private FilterService filterService;
 
     private static final Map<String, Image> IMAGE_CACHE = new ConcurrentHashMap<>();
     private final ObservableList<Subject> observableSubjects = FXCollections.observableArrayList();
@@ -54,14 +58,17 @@ public class MainController implements Initializable {
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         setupSortControls();
+        setupFilterControls();
         setupListView();
-        setupSearch();  // 新增搜索绑定
+        setupSearch();
         loadSubjectsAsync(false);
     }
 
     private void setupSortControls() {
-        sortCombo.getItems().addAll("ID排序", "中文名排序", "Rank排序", "Bgm Score排序", "本地总分排序", "放送日期排序");
+        sortCombo.getItems().addAll("放送日期排序", "中文名排序", "Rank排序", "Bgm Score排序", "本地总分排序", "ID排序");
         sortCombo.getSelectionModel().selectFirst();
+        ascDescToggle.setSelected(true);
+        ascDescToggle.setText("逆序 (DESC)");
 
         sortCombo.setOnAction(e -> applySorting());
         ascDescToggle.setOnAction(e -> {
@@ -87,6 +94,11 @@ public class MainController implements Initializable {
             // 更新状态栏显示数量
             statusLabel.setText(filteredSubjects.size() + " 部番剧");
         });
+    }
+
+    private void setupFilterControls() {
+        filterTypeCombo.getItems().addAll("Tag 标签", "Person 制作人员", "Character 角色态度(±1)", "Episode 剧集态度(±1)");
+        filterTypeCombo.getSelectionModel().selectFirst();
     }
 
     private void setupListView() {
@@ -148,37 +160,56 @@ public class MainController implements Initializable {
                     scoreInfo.setText(String.format("BGM: %s | 本地: %s", bgmScore, localScore));
 
                     // 星级显示
-                    starBox.getChildren().clear();
-                    double total = (subject.getRating() != null && subject.getRating().getTotalscore() != null) ? subject.getRating().getTotalscore() : 0;
-                    int fullStars = 0;
+                    double total = (subject.getRating() != null && subject.getRating().getTotalscore() != null)
+                            ? subject.getRating().getTotalscore() : 0;
+
+                    int baseStars = 0;          // 整星数量
+                    boolean hasHalfStar = false; // 是否有半星
+
                     if (total >= 105) {
-                        fullStars = 10;
+                        baseStars = 10;          // 10星，无半星
                     } else if (total >= 95) {
-                        fullStars = 9;
+                        baseStars = 9;
+                        if (total >= 100) hasHalfStar = true;   // 半星阈值 100
                     } else if (total >= 85) {
-                        fullStars = 8;
+                        baseStars = 8;
+                        if (total >= 90) hasHalfStar = true;     // 90
                     } else if (total >= 70) {
-                        fullStars = 7;
+                        baseStars = 7;
+                        if (total >= 77.5) hasHalfStar = true;   // 77.5
                     } else if (total >= 60) {
-                        fullStars = 6;
+                        baseStars = 6;
+                        if (total >= 65) hasHalfStar = true;     // 65
                     } else if (total >= 48) {
-                        fullStars = 5;
+                        baseStars = 5;
+                        if (total >= 54) hasHalfStar = true;     // 54
                     } else if (total >= 32) {
-                        fullStars = 4;
+                        baseStars = 4;
+                        if (total >= 40) hasHalfStar = true;     // 40
                     } else if (total >= 24) {
-                        fullStars = 3;
+                        baseStars = 3;
+                        if (total >= 28) hasHalfStar = true;     // 28
                     } else if (total >= 19) {
-                       fullStars = 2;
+                        baseStars = 2;
+                        if (total >= 21.5) hasHalfStar = true;   // 21.5
                     } else if (total >= 14) {
-                        fullStars = 1;
-                    } else {
-                        fullStars = 0;
-                    }
+                        baseStars = 1;
+                        if (total >= 16.5) hasHalfStar = true;   // 16.5
+                    } // 否则 baseStars = 0，hasHalfStar 保持 false
+                    starBox.getChildren().clear();
                     for (int i = 0; i < 10; i++) {
                         FontIcon star = new FontIcon();
-                        star.setIconLiteral(i < fullStars ? "fas-star" : "far-star");
                         star.setIconSize(14);
-                        star.setIconColor(i < fullStars ? Color.GOLD : Color.LIGHTGRAY);
+                        if (i < baseStars) {
+                            star.setIconLiteral("fas-star");
+                            star.setIconColor(Color.GOLD);
+                        } else if (hasHalfStar && i == baseStars) {
+                            star.setIconLiteral("fas-star-half-alt");   // 半星图标
+                            star.setIconColor(Color.GOLD);
+                        } else {
+                            star.setIconLiteral("far-star");
+                            star.setIconColor(Color.LIGHTGRAY);
+                        }
                         starBox.getChildren().add(star);
                     }
 
@@ -263,6 +294,40 @@ public class MainController implements Initializable {
         thread.start();
     }
 
+    // 3. 添加执行筛选逻辑的方法
+    @FXML
+    private void onFilterClick() {
+        String type = filterTypeCombo.getValue();
+        String keyword = filterInput.getText();
+        if (keyword == null || keyword.trim().isEmpty()) {
+            // 筛选框为空，直接重新加载全部数据
+            loadSubjectsAsync(false);
+            return;
+        }
+
+        statusLabel.setText("筛选数据中...");
+        CompletableFuture.supplyAsync(() -> {
+            return switch (type) {
+                case "Tag 标签" -> filterService.filterByTag(keyword);
+                case "Person 人物" -> filterService.filterByPerson(keyword);
+                case "Character 角色态度(±1)" -> filterService.filterByCharacterAttitude(keyword);
+                case "Episode 剧集态度(±1)" -> filterService.filterByEpisodeAttitude(keyword);
+                default -> subjectService.getAllSubjects();
+            };
+        }).thenAccept(filtered -> Platform.runLater(() -> {
+            observableSubjects.setAll(filtered);
+            applySorting(); // 应用当前的排序规则
+            statusLabel.setText("筛选完成: " + filteredSubjects.size() + " 部番剧");
+        }));
+    }
+
+    // 4. 添加清空筛选逻辑的方法
+    @FXML
+    private void onClearFilterClick() {
+        filterInput.clear();
+        loadSubjectsAsync(false); // 重新加载全部缓存数据并应用排序
+    }
+
     private void openSubjectDetail(Subject subject) {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/example/animemanager/FXML/subject.fxml"));
@@ -273,7 +338,10 @@ public class MainController implements Initializable {
             controller.initData(subject);
 
             Stage stage = (Stage) subjectListView.getScene().getWindow();
-            stage.setScene(new Scene(root, 1200, 800));
+            // 获取当前窗口尺寸
+            double width = stage.getWidth();
+            double height = stage.getHeight();
+            stage.setScene(new Scene(root, width, height));
         } catch (IOException e) {
             e.printStackTrace();
         }

@@ -14,8 +14,6 @@
             <padding><Insets top="30" right="20" bottom="30" left="20"/></padding>
             <Label text="Anime Manager" styleClass="sidebar-title" wrapText="true"/>
 
-            <Separator/>
-
             <Button onAction="#onUpdateDataClick" styleClass="sidebar-button" maxWidth="Infinity">
                 <graphic>
                     <FontIcon iconLiteral="fas-sync-alt" iconSize="16" iconColor="white"/>
@@ -27,6 +25,16 @@
                 <Label text="排序方式" styleClass="sidebar-subtitle"/>
                 <ComboBox fx:id="sortCombo" maxWidth="Infinity" styleClass="sort-combo"/>
                 <ToggleButton fx:id="ascDescToggle" text="顺序 (ASC)" maxWidth="Infinity" styleClass="sort-toggle"/>
+            </VBox>
+
+            <VBox spacing="10">
+                <Label text="高级筛选" styleClass="sidebar-subtitle"/>
+                <ComboBox fx:id="filterTypeCombo" maxWidth="Infinity" styleClass="sort-combo"/>
+                <TextField fx:id="filterInput" promptText="输入过滤关键词..." styleClass="filter-field"/>
+                <HBox spacing="10">
+                    <Button text="筛选" onAction="#onFilterClick" styleClass="action-button" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                    <Button text="清空" onAction="#onClearFilterClick" styleClass="clear-button" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                </HBox>
             </VBox>
         </VBox>
     </left>

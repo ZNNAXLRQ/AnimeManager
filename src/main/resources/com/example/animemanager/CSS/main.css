@@ -155,3 +155,43 @@
     -fx-background-color: transparent;
     -fx-shape: "";
 }
+
+/* ========== 筛选框与按钮样式 ========== */
+.filter-field {
+    -fx-background-color: white;
+    -fx-border-color: #cbd5e0;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+    -fx-padding: 8 10;
+    -fx-font-size: 13px;
+    -fx-prompt-text-fill: #a0aec0;
+}
+.filter-field:focused {
+    -fx-border-color: #667eea;
+}
+
+.action-button {
+    -fx-background-color: #48bb78; /* 柔和的绿色 */
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-background-radius: 6px;
+    -fx-padding: 8 10;
+    -fx-cursor: hand;
+}
+.action-button:hover {
+    -fx-background-color: #38a169;
+    -fx-effect: dropshadow(gaussian, rgba(72,187,120,0.3), 8, 0, 0, 2);
+}
+
+.clear-button {
+    -fx-background-color: #f56565; /* 柔和的红色 */
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-background-radius: 6px;
+    -fx-padding: 8 10;
+    -fx-cursor: hand;
+}
+.clear-button:hover {
+    -fx-background-color: #e53e3e;
+    -fx-effect: dropshadow(gaussian, rgba(245,101,101,0.3), 8, 0, 0, 2);
+}
