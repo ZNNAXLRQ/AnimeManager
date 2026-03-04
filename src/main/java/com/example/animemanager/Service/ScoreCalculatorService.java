@@ -1,9 +1,13 @@
 package com.example.animemanager.Service;
 
+import com.example.animemanager.Entity.Rating;
+import com.example.animemanager.Entity.Subject;
 import com.example.animemanager.Util.JsonConfigUtil;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -27,7 +31,7 @@ public class ScoreCalculatorService {
     private static final double CURVE_POWER_DOWN = 0.6; // 下半区(0-5)减速指数
 
     static {
-        Map<String, Double> weights = JsonConfigUtil.readAnimeWeights("config.json");
+        Map<String, Double> weights = JsonConfigUtil.readAnimeWeights("com/example/animemanager/Data/config.json");
         if (weights == null) weights = new HashMap<>();
 
         ANIME_WEIGHTS = weights;
@@ -62,25 +66,19 @@ public class ScoreCalculatorService {
         valAtmosphere = fixLowScore(atmosphere, valAtmosphere);
         double valLove = calculateCurveValue(love);
         valLove = fixLowScore(love, valLove);
-
         // 3. 计算五维加权总分 (满分约90分)
         double performanceScore = valStory * WEIGHT_STORY + valCharacter * WEIGHT_CHARACTER + valVisual * WEIGHT_VISUAL + valAtmosphere * WEIGHT_ATMOSPHERE + valLove * WEIGHT_LOVE;
         if (story < 3.0 || character < 3.0 || visual < 3.0 || atmosphere < 3.0 || love < 3.0) {
             performanceScore *= 0.8;
         }
-
         // 4. 计算信息量得分 (满分15分)
         double infoScore = calculateInfoScore(info);
-
-        // 5. 计算初步总分
-        // 结构：保底(10) + 信息(0-15) + 表现(0-90) = Max 115
+        // 5. 计算初步总分 结构：保底(10) + 信息(0-15) + 表现(0-90) = Max 115
         double totalScore = BASE_SCORE + infoScore + performanceScore;
         if (info < 5.0) {
             // 信息量总分打折
             totalScore *= 0.8;
         }
-
-
         // 7. 最终兜底，确保不低于BASE
         return Math.max(BASE_SCORE, totalScore);
     }
@@ -151,6 +149,44 @@ public class ScoreCalculatorService {
         map.put("atmosphere", String.valueOf(atmosphere));
         map.put("love", String.valueOf(love));
         return map;
+    }
+
+    public static double calculatePersonScore(List<Subject> subjects) {
+        if (subjects == null || subjects.isEmpty()) {
+            return 0.0;
+        }
+        double sum = 0.0;
+        List<Double> scores = new ArrayList<>();
+        for (Subject subject : subjects) {
+            double rating = subject.getRating().getTotalscore();
+            if (rating == 0) {
+                scores.add(0.0);
+            } else {
+                double totalScore = rating;
+                scores.add(totalScore);
+                sum += totalScore;
+            }
+        }
+        int n = scores.size();
+        double mu = sum / n;
+        // 计算偏差项 Δ = Σ (s_i - μ) * |s_i - μ|
+        double delta = 0.0;
+        for (double s : scores) {
+            double diff = s - mu;
+            delta += diff * Math.abs(diff); // 即 diff * |diff| = |diff| * diff
+        }
+        // 参数
+        double alpha = 0.1;
+        double beta = 0.01;
+        double k = 2.15;
+        double maxScore = 115.0;
+        // 调整平均分
+        double muAdj = mu + (alpha / (maxScore * n)) * delta;
+        // 数量奖励因子
+        double F = 1.0 + beta * Math.log(n + 1);
+        double I = muAdj * F;
+        // 压缩到百分制
+        return 100.0 * (1.0 - Math.exp(-k * I / maxScore));
     }
 
     public static String getScoreDescription(double rawScore) {

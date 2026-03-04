@@ -3,6 +3,7 @@ package com.example.animemanager;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
 import javafx.stage.Stage;
 import lombok.Getter;
 import org.springframework.boot.SpringApplication;
@@ -10,6 +11,8 @@ import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.scheduling.annotation.EnableScheduling; // 导入此包
+
+import java.io.File;
 
 @SpringBootApplication
 @EnableScheduling // 开启定时任务
@@ -32,7 +35,13 @@ public class Main extends Application {
         fxmlLoader.setControllerFactory(context::getBean);
 
         Scene scene = new Scene(fxmlLoader.load(), 1200, 800);
-        stage.setTitle("Anime Manager");
+        File iconFile = new File("src/main/resources/com/example/animemanager/Data/icon.png");
+        if (iconFile.exists()) {
+            stage.getIcons().add(new Image(iconFile.toURI().toString()));
+        } else {
+            System.err.println("图标文件未找到，使用默认图标");
+        }
+        stage.setTitle("あにめManager");
         stage.setScene(scene);
         stage.show();
     }

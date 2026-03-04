@@ -8,7 +8,7 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>4.0.0</version>
-        <relativePath/> <!-- lookup parent from repository -->
+        <relativePath/>
     </parent>
 
     <groupId>com.example</groupId>
@@ -130,30 +130,87 @@
     <build>
         <plugins>
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.11.0</version>
-                <configuration>
-                    <source>22</source>
-                    <target>22</target>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.openjfx</groupId>
-                <artifactId>javafx-maven-plugin</artifactId>
-                <version>0.0.8</version>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
                 <executions>
                     <execution>
-                        <!-- Default configuration for running with: mvn clean javafx:run -->
-                        <id>default-cli</id>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-main-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
                         <configuration>
-                            <mainClass>com.example.animemanager/com.example.animemanager.Main</mainClass>
-                            <launcher>app</launcher>
-                            <jlinkZipName>app</jlinkZipName>
-                            <jlinkImageName>app</jlinkImageName>
-                            <noManPages>true</noManPages>
-                            <stripDebug>true</stripDebug>
-                            <noHeaderFiles>true</noHeaderFiles>
+                            <outputDirectory>${project.build.directory}/app-input</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.build.directory}</directory>
+                                    <includes>
+                                        <include>${project.build.finalName}.jar</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>copy-config-files</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/app-input</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>src/main/resources</directory>
+                                    <includes>
+                                        <include>com/example/animemanager/Data/config.json</include>
+                                        <include>com/example/animemanager/Data/icon.png</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.panteleyev</groupId>
+                <artifactId>jpackage-maven-plugin</artifactId>
+                <version>1.6.0</version>
+                <executions>
+                    <execution>
+                        <id>create-exe</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jpackage</goal>
+                        </goals>
+                        <configuration>
+                            <type>APP_IMAGE</type>
+                            <name>AnimeManager</name>
+                            <appVersion>1.0.0</appVersion>
+                            <input>${project.build.directory}/app-input</input>
+                            <mainJar>${project.build.finalName}.jar</mainJar>
+                            <mainClass>com.example.animemanager.AppLaunch</mainClass>
+                            <destination>${project.build.directory}/jpackage</destination>
+                            <icon>src/main/resources/com/example/animemanager/Image/icon.ico</icon>
+                            <runtimeImage>C:\Program Files\Java\jdk-22</runtimeImage>
+                            <javaOptions>
+                                <option>--module-path="C:\Program Files\Java\javafx-sdk-22.0.1\lib"</option>
+                                <option>--add-modules=javafx.controls,javafx.fxml,javafx.web</option>
+                                <option>--add-opens=java.base/java.lang=ALL-UNNAMED</option>
+                                <option>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</option>
+                            </javaOptions>
                         </configuration>
                     </execution>
                 </executions>

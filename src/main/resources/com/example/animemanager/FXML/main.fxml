@@ -18,7 +18,7 @@
                 <graphic>
                     <FontIcon iconLiteral="fas-sync-alt" iconSize="16" iconColor="white"/>
                 </graphic>
-                <text>   更新数据</text>  <!-- 留空格子保持图标和文字间距 -->
+                <text>   更新数据</text>
             </Button>
 
             <VBox spacing="10">
