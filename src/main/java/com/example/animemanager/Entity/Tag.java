@@ -19,7 +19,7 @@ public class Tag {
 
     @Column(name = "count", nullable = false)
     @ColumnDefault("0")
-    private Integer count;
+    private Integer count = 0;
 
     @ManyToMany(mappedBy = "tags")
     private List<Subject> subjects;  // 反向引用（可选）

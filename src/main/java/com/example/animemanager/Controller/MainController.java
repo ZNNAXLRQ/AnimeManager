@@ -1,10 +1,12 @@
-package com.example.animemanager.UI.Controller;
+package com.example.animemanager.Controller;
 
 import com.example.animemanager.Entity.Subject;
 import com.example.animemanager.Main;
 import com.example.animemanager.Service.DataImportService;
 import com.example.animemanager.Service.FilterService;
+import com.example.animemanager.Service.ScoreCalculatorService;
 import com.example.animemanager.Service.SubjectService;
+import com.example.animemanager.Util.LogCollector;
 import org.kordamp.ikonli.javafx.FontIcon;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -30,9 +32,7 @@ import org.springframework.stereotype.Controller;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.Comparator;
-import java.util.Map;
-import java.util.ResourceBundle;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -46,14 +46,23 @@ public class MainController implements Initializable {
     @FXML private TextField searchField;
     @FXML private ComboBox<String> filterTypeCombo;
     @FXML private TextField filterInput;
+    @FXML private TextField startDateField;
+    @FXML private TextField endDateField;
+    @FXML private Label bangumiLevelLabel;
+    @FXML private Label localLevelLabel;
+    @FXML private Label Distancelabel;
+    @FXML private VBox logDrawer;
+    @FXML private ListView<String> logListView;
 
     @Autowired private SubjectService subjectService;
     @Autowired private DataImportService dataImportService;
     @Autowired private FilterService filterService;
+    @Autowired private ScoreCalculatorService scoreCalculatorService;
 
     private static final Map<String, Image> IMAGE_CACHE = new ConcurrentHashMap<>();
     private final ObservableList<Subject> observableSubjects = FXCollections.observableArrayList();
-    private FilteredList<Subject> filteredSubjects;  // 新增过滤列表
+    private FilteredList<Subject> filteredSubjects;
+    private boolean logDrawerVisible = false;
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
@@ -61,7 +70,18 @@ public class MainController implements Initializable {
         setupFilterControls();
         setupListView();
         setupSearch();
+        startDateField.setPromptText("起始日期 (如2026-03-05)");
+        endDateField.setPromptText("结束日期 (如2026-03-05)");
         loadSubjectsAsync(false);
+        logListView.setItems(LogCollector.getInstance().getLogLines());
+        logListView.setCellFactory(lv -> new ListCell<String>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) setText(null);
+                else setText(item);
+            }
+        });
     }
 
     private void setupSortControls() {
@@ -249,6 +269,42 @@ public class MainController implements Initializable {
         }));
     }
 
+    private void applyFiltersAsync() {
+        // 读取当前UI值
+        String type = filterTypeCombo.getValue();
+        String keyword = filterInput.getText();
+        String start = startDateField.getText();
+        String end = endDateField.getText();
+
+        statusLabel.setText("筛选数据中...");
+        CompletableFuture.supplyAsync(() -> {
+            // 1. 根据类型关键词获取基础列表
+            List<Subject> baseList;
+            if (keyword != null && !keyword.trim().isEmpty()) {
+                baseList = switch (type) {
+                    case "Tag 标签" -> filterService.filterByTag(keyword);
+                    case "Person 制作人员" -> filterService.filterByPerson(keyword);
+                    case "Character 角色态度(±1)" -> filterService.filterByCharacterAttitude(keyword);
+                    case "Episode 剧集态度(±1)" -> filterService.filterByEpisodeAttitude(keyword);
+                    default -> subjectService.getAllSubjects();
+                };
+            } else {
+                baseList = subjectService.getAllSubjects();
+            }
+
+            // 2. 应用日期范围过滤（内存过滤）
+            if ((start != null && !start.trim().isEmpty()) ||
+                    (end != null && !end.trim().isEmpty())) {
+                baseList = filterService.filterSubjectsByDateRange(baseList, start, end);
+            }
+            return baseList;
+        }).thenAccept(filtered -> Platform.runLater(() -> {
+            observableSubjects.setAll(filtered);
+            applySorting();
+            statusLabel.setText("筛选完成: " + filteredSubjects.size() + " 部番剧");
+        }));
+    }
+
     private void applySorting() {
         if (observableSubjects.isEmpty()) return;
 
@@ -281,8 +337,14 @@ public class MainController implements Initializable {
 
         updateTask.setOnSucceeded(e -> {
             statusLabel.setText("更新完成，正在刷新...");
+            // 清空所有筛选条件
+            filterInput.clear();
+            startDateField.clear();
+            endDateField.clear();
+            // 重新加载全部数据（不使用筛选）
             loadSubjectsAsync(true);
         });
+
 
         updateTask.setOnFailed(e -> {
             statusLabel.setText("更新失败!");
@@ -297,35 +359,26 @@ public class MainController implements Initializable {
     // 3. 添加执行筛选逻辑的方法
     @FXML
     private void onFilterClick() {
-        String type = filterTypeCombo.getValue();
-        String keyword = filterInput.getText();
-        if (keyword == null || keyword.trim().isEmpty()) {
-            // 筛选框为空，直接重新加载全部数据
-            loadSubjectsAsync(false);
-            return;
-        }
-
-        statusLabel.setText("筛选数据中...");
-        CompletableFuture.supplyAsync(() -> {
-            return switch (type) {
-                case "Tag 标签" -> filterService.filterByTag(keyword);
-                case "Person 人物" -> filterService.filterByPerson(keyword);
-                case "Character 角色态度(±1)" -> filterService.filterByCharacterAttitude(keyword);
-                case "Episode 剧集态度(±1)" -> filterService.filterByEpisodeAttitude(keyword);
-                default -> subjectService.getAllSubjects();
-            };
-        }).thenAccept(filtered -> Platform.runLater(() -> {
-            observableSubjects.setAll(filtered);
-            applySorting(); // 应用当前的排序规则
-            statusLabel.setText("筛选完成: " + filteredSubjects.size() + " 部番剧");
-        }));
+        applyFiltersAsync();
     }
 
     // 4. 添加清空筛选逻辑的方法
     @FXML
     private void onClearFilterClick() {
         filterInput.clear();
-        loadSubjectsAsync(false); // 重新加载全部缓存数据并应用排序
+        applyFiltersAsync();
+    }
+
+    @FXML
+    private void onDateFilterClick() {
+        applyFiltersAsync();
+    }
+
+    @FXML
+    private void onClearDateClick() {
+        startDateField.clear();
+        endDateField.clear();
+        applyFiltersAsync();
     }
 
     private void openSubjectDetail(Subject subject) {
@@ -345,5 +398,45 @@ public class MainController implements Initializable {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    @FXML
+    private void calculateLevels() {
+        List<Subject> currentList = new ArrayList<>(filteredSubjects);
+        if (currentList.isEmpty()) {
+            bangumiLevelLabel.setText("--");
+            localLevelLabel.setText("--");
+            Distancelabel.setText("--");
+            statusLabel.setText("列表为空，无法计算");
+            return;
+        }
+
+        double bangumiLevel = scoreCalculatorService.calculateBangumiLevel(currentList);
+        double localLevel = scoreCalculatorService.calculateLocallevel(currentList);
+        double distance = (bangumiLevel - localLevel) / 10;
+
+        bangumiLevelLabel.setText(String.format("%.2f", bangumiLevel));
+        localLevelLabel.setText(String.format("%.2f", localLevel));
+        Distancelabel.setText(String.format("% .2f", distance));
+        statusLabel.setText("均分计算完成");
+    }
+
+    @FXML
+    private void toggleLogDrawer() {
+        logDrawerVisible = !logDrawerVisible;
+        logDrawer.setManaged(logDrawerVisible);
+        logDrawer.setVisible(logDrawerVisible);
+    }
+
+    @FXML
+    private void closeLogDrawer() {
+        logDrawerVisible = false;
+        logDrawer.setManaged(false);
+        logDrawer.setVisible(false);
+    }
+
+    @FXML
+    private void clearLog() {
+        LogCollector.getInstance().clear();
     }
 }

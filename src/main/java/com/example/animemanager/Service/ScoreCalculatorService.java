@@ -1,6 +1,5 @@
 package com.example.animemanager.Service;
 
-import com.example.animemanager.Entity.Rating;
 import com.example.animemanager.Entity.Subject;
 import com.example.animemanager.Util.JsonConfigUtil;
 import org.springframework.stereotype.Service;
@@ -46,7 +45,7 @@ public class ScoreCalculatorService {
     }
 
     // 核心评分逻辑
-    public static double calculateTotalScore(double infoRaw, double storyRaw, double characterRaw, double visualRaw, double atmosphereRaw, double loveRaw) {
+    public double calculateTotalScore(double infoRaw, double storyRaw, double characterRaw, double visualRaw, double atmosphereRaw, double loveRaw) {
         // 1. 分数矫正 (0-10)
         double info = correctScore(infoRaw);
         double story = correctScore(storyRaw);
@@ -83,7 +82,7 @@ public class ScoreCalculatorService {
         return Math.max(BASE_SCORE, totalScore);
     }
 
-    public static Map<String, String> AnimeReport(double info, double story, double character, double visual, double atmosphere, double love) {
+    public Map<String, String> AnimeReport(double info, double story, double character, double visual, double atmosphere, double love) {
         double totalScore = calculateTotalScore(info, story, character, visual, atmosphere, love);
 
         String grade, comment, advice;
@@ -133,7 +132,7 @@ public class ScoreCalculatorService {
         } else {
             grade = "☆ 纯石 ☆";
             comment = "怀疑人生的逆天之作";
-            temp = totalScore / 24 + 1.0;
+            temp = totalScore / 14 + 1.0;
             advice = "bangumi-" + String.format("%.3f", temp);
         }
 
@@ -151,7 +150,7 @@ public class ScoreCalculatorService {
         return map;
     }
 
-    public static double calculatePersonScore(List<Subject> subjects) {
+    public double calculateLocallevel(List<Subject> subjects) {
         if (subjects == null || subjects.isEmpty()) {
             return 0.0;
         }
@@ -159,37 +158,101 @@ public class ScoreCalculatorService {
         List<Double> scores = new ArrayList<>();
         for (Subject subject : subjects) {
             double rating = subject.getRating().getTotalscore();
-            if (rating == 0) {
-                scores.add(0.0);
-            } else {
-                double totalScore = rating;
-                scores.add(totalScore);
-                sum += totalScore;
-            }
+            scores.add(rating);
+            sum += rating;
         }
         int n = scores.size();
         double mu = sum / n;
+
         // 计算偏差项 Δ = Σ (s_i - μ) * |s_i - μ|
         double delta = 0.0;
         for (double s : scores) {
             double diff = s - mu;
-            delta += diff * Math.abs(diff); // 即 diff * |diff| = |diff| * diff
+            delta += diff * Math.abs(diff);
         }
-        // 参数
-        double alpha = 0.1;
-        double beta = 0.01;
-        double k = 2.15;
+
+        // 新公式参数（可根据实际数据微调）
+        double alpha = 2.0;      // 稳定度影响系数
+        double beta = 0.5;       // 数量奖励系数
         double maxScore = 115.0;
-        // 调整平均分
-        double muAdj = mu + (alpha / (maxScore * n)) * delta;
-        // 数量奖励因子
-        double F = 1.0 + beta * Math.log(n + 1);
-        double I = muAdj * F;
-        // 压缩到百分制
-        return 100.0 * (1.0 - Math.exp(-k * I / maxScore));
+
+        // 调整平均分（加入稳定度修正）
+        double adjustedMean = mu + alpha * delta / (maxScore * n);
+        // 数量奖励（对数增长）
+        double quantityBonus = beta * Math.log(n + 1);
+        // 综合原始分
+        double raw = adjustedMean + quantityBonus;
+        // 线性映射到百分制
+        double score = raw * 100.0 / maxScore;
+
+        // 边界裁剪
+        if (score < 0) score = 0;
+        if (score > 100) score = 100;
+        return score;
     }
 
-    public static String getScoreDescription(double rawScore) {
+    public double calculateBangumiLevel(List<Subject> subjects) {
+        if (subjects == null || subjects.isEmpty()) {
+            return 0.0;
+        }
+        double sum = 0.0;
+        List<Double> scores = new ArrayList<>();
+        for (Subject subject : subjects) {
+            double rating = subject.getRating().getScore() + 0.5;
+            double num = 0;
+            if (rating >= 10) {
+                num = 115 - (10.5 - rating) / 0.5 * 10;
+            } else if (rating >= 9) {
+                num = 105 - (10 - rating) * 10;
+            } else if (rating >= 8) {
+                num = 95 - (9 - rating) * 10;
+            } else if (rating >= 7) {
+                num = 85 - (8 - rating) * 15;
+            } else if (rating >= 6) {
+                num = 70 - (7 - rating) * 10;
+            } else if (rating >= 5) {
+                num = 60 - (5 - rating) * 12;
+            } else if (rating >= 4) {
+                num = 48 - (4 - rating) * 16;
+            } else if (rating >= 3) {
+                num = 32 - (3 - rating) * 8;
+            } else {
+                num = 10 + (rating - 1.5) * 14;
+            }
+            scores.add(num);
+            sum += num;
+        }
+        int n = scores.size();
+        double mu = sum / n;
+
+        // 计算偏差项 Δ = Σ (s_i - μ) * |s_i - μ|
+        double delta = 0.0;
+        for (double s : scores) {
+            double diff = s - mu;
+            delta += diff * Math.abs(diff);
+        }
+
+        // 新公式参数
+        double alpha = 2.0;      // 稳定度影响系数
+        double beta = 0.5;       // 数量奖励系数
+        double maxScore = 115.0;
+
+        // 调整平均分
+        double adjustedMean = mu + alpha * delta / (maxScore * n);
+        // 数量奖励
+        double quantityBonus = beta * Math.log(n + 1);
+        // 综合原始分
+        double raw = adjustedMean + quantityBonus;
+        // 线性映射到百分制
+        double score = raw * 100.0 / maxScore;
+
+        // 边界裁剪
+        if (score < 0) score = 0;
+        if (score > 100) score = 100;
+        return score;
+    }
+
+    public String getScoreDescription(double rawScore) {
         int scoreInt = (int) Math.round(rawScore);
         return switch (scoreInt) {
             case 10 -> "巅峰";
@@ -206,14 +269,14 @@ public class ScoreCalculatorService {
         };
     }
 
-    private static double correctScore(double rawScore) {
+    private double correctScore(double rawScore) {
         if (rawScore < 0) return 0.0;
         if (rawScore > 10) return 10.0;
         return rawScore;
     }
 
     // 曲线映射核心：两端敏感，中间平缓，上端加速大于下端
-    private static double calculateCurveValue(double score) {
+    private double calculateCurveValue(double score) {
         if (score >= 5.0) {
             // [5, 10] -> [40, 90]
             double range = 10.0 - 5.0;
@@ -229,12 +292,12 @@ public class ScoreCalculatorService {
         }
     }
 
-    private static double calculateInfoScore(double info) {
+    private double calculateInfoScore(double info) {
         // 信息量 0-15分
         return MAX_INFO_SCORE * Math.pow(info / 10.0, 1.5);
     }
 
-    private static double fixLowScore(double score, double valscore) {
+    private double fixLowScore(double score, double valscore) {
         if (score < 2.0) {
             valscore *= 0.5;
         }

@@ -65,10 +65,45 @@ public class FilterService {
         }
     }
 
+    public List<Subject> filterSubjectsByDateRange(List<Subject> subjects,
+                                                   String startDate,
+                                                   String endDate) {
+        if (subjects == null || subjects.isEmpty()) return subjects;
+
+        String start = normalizeDate(startDate);
+        String end = normalizeDate(endDate);
+
+        // 无有效日期条件，直接返回原列表
+        if (start == null && end == null) return subjects;
+
+        return subjects.stream()
+                .filter(s -> {
+                    String date = s.getDate();
+                    if (date == null) return false;               // 无日期的条目排除
+                    if (start != null && date.compareTo(start) < 0) return false;
+                    if (end != null && date.compareTo(end) > 0) return false;
+                    return true;
+                })
+                .collect(Collectors.toList());
+    }
+
     // 辅助方法：处理纯关键词筛选
     private List<Subject> createQuery(String jpql, String keyword) {
         return entityManager.createQuery(jpql, Subject.class)
                 .setParameter("keyword", "%" + (keyword != null ? keyword.trim() : "") + "%")
                 .getResultList();
     }
+
+    private String normalizeDate(String input) {
+        if (input == null || input.trim().isEmpty()) return null;
+        String trimmed = input.trim();
+        // 将 '.' 替换为 '-'
+        String normalized = trimmed.replace('.', '-');
+        // 简单验证是否为 yyyy-MM-dd 格式
+        if (normalized.matches("\\d{4}-\\d{2}-\\d{2}")) {
+            return normalized;
+        }
+        return null; // 无法解析则忽略该条件
+    }
+
 }

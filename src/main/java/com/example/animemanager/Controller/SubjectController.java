@@ -1,4 +1,4 @@
-package com.example.animemanager.UI.Controller;
+package com.example.animemanager.Controller;
 
 import com.example.animemanager.Entity.*;
 import com.example.animemanager.Entity.Character;
@@ -6,13 +6,16 @@ import com.example.animemanager.Main;
 import com.example.animemanager.Repository.*;
 import com.example.animemanager.Service.ScoreCalculatorService;
 import com.example.animemanager.Service.SubjectService;
+import com.example.animemanager.Util.LogCollector;
 import javafx.animation.PauseTransition;
 import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.fxml.Initializable;
 import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
@@ -20,6 +23,7 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -36,10 +40,7 @@ import org.springframework.stereotype.Controller;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.ResourceBundle;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Controller
@@ -81,12 +82,27 @@ public class SubjectController implements Initializable {
     @FXML private ListView<Person> personListView;
     @FXML private ListView<Episode> episodeListView;
 
+    @FXML private Label statusMessageLabel;
+    @FXML private VBox logDrawer;
+    @FXML private ListView<String> logListView;
+    @FXML private VBox tagDrawer;
+    @FXML private TextField tagSearchField;
+    @FXML private TextField newTagField;
+    @FXML private FlowPane tagButtonsContainer;
+    @FXML private Button deleteModeButton;
+    @FXML private Button saveTagButton;
+
+
     private Subject currentSubject;
     private double currentTotalScore = 0.0;
+    private boolean logDrawerVisible = false;
+    private boolean deleteMode = false;
 
     private double[] currentValues = {5.0, 5.0, 5.0, 5.0, 5.0, 5.0};
     private final String[] LABELS = {"信息", "故事", "人物", "喜爱", "视听", "氛围"};
-
+    private final ObservableList<Tag> allTags = FXCollections.observableArrayList();
+    private final Set<Long> selectedTagIds = new HashSet<>();
+    private final Set<Long> selectedForDeletionIds = new HashSet<>();
     private Point2D[] dataPoints = new Point2D[6];
 
     private static final Color RADAR_GRID_COLOR = Color.web("#e2e8f0");
@@ -101,7 +117,16 @@ public class SubjectController implements Initializable {
     public void initialize(URL location, ResourceBundle resources) {
         setupInteractiveCanvas();
         setupEnterKeyHandlers();
-        drawRadarChart(); // 初始绘制空数据
+        drawRadarChart();
+        logListView.setItems(LogCollector.getInstance().getLogLines());
+        logListView.setCellFactory(lv -> new ListCell<String>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) setText(null);
+                else setText(item);
+            }
+        });
     }
 
     private void setupInteractiveCanvas() {
@@ -333,46 +358,182 @@ public class SubjectController implements Initializable {
 
     @FXML
     private void onAddTagClick() {
-        try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/example/animemanager/FXML/tag_management.fxml"));
-            loader.setControllerFactory(Main.getContext()::getBean);
-            Parent root = loader.load();
+        // 展开抽屉
+        tagDrawer.setManaged(true);
+        tagDrawer.setVisible(true);
+        setupTagDrawer();
+        deleteMode = false;
+        deleteModeButton.setText("删除");
+        deleteModeButton.getStyleClass().remove("delete-mode-active");
+        saveTagButton.setText("保存");
+        statusMessageLabel.setText("标签管理模式已打开");
+    }
 
-            TagManagementController controller = loader.getController();
-            // 传入当前 subject 已关联的标签
-            List<Tag> currentTags = currentSubject.getTags(); // 已预加载，不会懒加载异常
-            if (currentTags == null) {
-                currentTags = new ArrayList<>();
-            }
-            controller.setPreSelectedTags(currentTags);
+    private void loadAllTags() {
+        allTags.setAll(tagRepository.findAll());
+    }
 
-            Stage stage = new Stage();
-            stage.setTitle("选择标签");
-            stage.setScene(new Scene(root, 450, 550));
-            stage.initModality(Modality.APPLICATION_MODAL);
-            stage.showAndWait();
+    private void setupTagDrawer() {
+        tagButtonsContainer.getChildren().clear();
+        loadAllTags();
 
-            List<Tag> selected = controller.getSelectedTags();
-            if (selected != null) {
-                // 提取选中的标签 ID 列表
-                List<Long> tagIds = selected.stream()
-                        .map(Tag::getTagId)
-                        .collect(Collectors.toList());
-
-                // 调用服务层方法更新标签关联和 count
-                subjectService.updateSubjectTags(currentSubject.getId(), tagIds);
-
-                // 重新加载当前 subject（确保 tags 集合最新）
-                currentSubject = subjectRepository.findByIdWithTags(currentSubject.getId())
-                        .orElse(currentSubject);
-
-                // 刷新标签列表显示
-                loadTags();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-            showToast("无法打开标签管理窗口");
+        selectedTagIds.clear();
+        if (currentSubject.getTags() != null) {
+            currentSubject.getTags().forEach(tag -> selectedTagIds.add(tag.getTagId()));
         }
+
+        for (Tag tag : allTags) {
+            Button btn = new Button(tag.getName());
+            btn.setUserData(tag);
+            btn.getStyleClass().add("tag-toggle-button"); // 基础样式
+            btn.setMaxWidth(Double.MAX_VALUE);
+
+            // 根据当前模式设置初始样式
+            updateButtonStyle(btn, tag);
+
+            btn.setOnAction(e -> handleTagButtonAction(btn));
+            tagButtonsContainer.getChildren().add(btn);
+        }
+
+        // 搜索过滤监听
+        tagSearchField.textProperty().addListener((obs, old, val) -> filterTags(val));
+        newTagField.setOnAction(e -> addNewTag());
+    }
+
+    private void updateButtonStyle(Button btn, Tag tag) {
+        btn.getStyleClass().removeAll("tag-button-normal-selected", "tag-button-delete-selected", "delete-mode");
+        if (deleteMode) {
+            btn.getStyleClass().add("delete-mode");
+            if (selectedForDeletionIds.contains(tag.getTagId())) {
+                btn.getStyleClass().add("tag-button-delete-selected");
+            }
+        } else {
+            if (selectedTagIds.contains(tag.getTagId())) {
+                btn.getStyleClass().add("tag-button-normal-selected");
+            }
+        }
+    }
+
+    private void handleTagButtonAction(Button btn) {
+        Tag tag = (Tag) btn.getUserData();
+        Long tagId = tag.getTagId();
+        if (deleteMode) {
+            if (selectedForDeletionIds.contains(tagId))
+                selectedForDeletionIds.remove(tagId);
+            else
+                selectedForDeletionIds.add(tagId);
+        } else {
+            if (selectedTagIds.contains(tagId))
+                selectedTagIds.remove(tagId);
+            else
+                selectedTagIds.add(tagId);
+        }
+        updateButtonStyle(btn, tag);
+    }
+
+    private void filterTags(String keyword) {
+        if (keyword == null || keyword.isEmpty()) {
+            for (javafx.scene.Node node : tagButtonsContainer.getChildren()) {
+                node.setVisible(true);
+                node.setManaged(true);
+            }
+        } else {
+            String lower = keyword.toLowerCase();
+            for (javafx.scene.Node node : tagButtonsContainer.getChildren()) {
+                Button btn = (Button) node;  // 改为 Button
+                Tag tag = (Tag) btn.getUserData();
+                boolean match = tag.getName().toLowerCase().contains(lower);
+                btn.setVisible(match);
+                btn.setManaged(match);
+            }
+        }
+    }
+
+    private void refreshTagButtons() {
+        // 重建所有按钮（简化实现，也可只更新状态）
+        setupTagDrawer();
+    }
+
+    @FXML
+    private void toggleDeleteMode() {
+        deleteMode = !deleteMode;
+        if (deleteMode) {
+            deleteModeButton.setText("退出删除");
+            deleteModeButton.getStyleClass().add("delete-mode-active");
+            saveTagButton.setText("删除");
+            selectedForDeletionIds.clear();
+            statusMessageLabel.setText("已切换到删除模式，点击标签选择要删除的项");
+        } else {
+            deleteModeButton.setText("删除");
+            deleteModeButton.getStyleClass().remove("delete-mode-active");
+            saveTagButton.setText("保存");
+            selectedForDeletionIds.clear();
+            statusMessageLabel.setText("已退出删除模式，标签管理模式已打开");
+        }
+        for (Node node : tagButtonsContainer.getChildren()) {
+            Button btn = (Button) node;
+            Tag tag = (Tag) btn.getUserData();
+            updateButtonStyle(btn, tag);
+        }
+    }
+
+    @FXML
+    private void addNewTag() {
+        String name = newTagField.getText().trim();
+        if (name.isEmpty()) {
+            statusMessageLabel.setText("标签名不能为空");
+            return;
+        }
+        // 检查是否已存在（不区分大小写）
+        Optional<Tag> existing = allTags.stream()
+                .filter(t -> t.getName().equalsIgnoreCase(name))
+                .findFirst();
+        if (existing.isPresent()) {
+            // 已存在则直接选中（正常模式）
+            if (!deleteMode) {
+                selectedTagIds.add(existing.get().getTagId());
+                refreshTagButtons();
+            }
+            newTagField.clear();
+            return;
+        }
+        // 新建标签
+        Tag newTag = new Tag();
+        newTag.setName(name);
+        newTag.setCount(0); // 显式设置 count 为 0
+        tagRepository.save(newTag);
+        allTags.add(newTag);
+        if (!deleteMode) {
+            selectedTagIds.add(newTag.getTagId());
+        }
+        newTagField.clear();
+        refreshTagButtons();
+        statusMessageLabel.setText("标签已添加");
+    }
+
+    @FXML
+    private void saveOrDeleteTags() {
+        if (deleteMode) {
+            if (selectedForDeletionIds.isEmpty()) { /* 提示 */ return; }
+            for (Long tagId : selectedForDeletionIds) {
+                subjectService.deleteTagAndRelations(tagId);
+            }
+            allTags.removeIf(tag -> selectedForDeletionIds.contains(tag.getTagId()));
+            selectedTagIds.removeAll(selectedForDeletionIds);
+            selectedForDeletionIds.clear();
+            refreshTagButtons();
+        } else {
+            subjectService.updateSubjectTags(currentSubject.getId(), new ArrayList<>(selectedTagIds));
+            currentSubject = subjectRepository.findByIdWithTags(currentSubject.getId()).orElse(currentSubject);
+            loadTags();
+            closeTagDrawer();
+        }
+    }
+
+    @FXML
+    private void closeTagDrawer() {
+        tagDrawer.setManaged(false);
+        tagDrawer.setVisible(false);
     }
 
     @FXML
@@ -418,11 +579,11 @@ public class SubjectController implements Initializable {
 
             drawRadarChart(); // 更新雷达图
             subjectService.UpdateSubject(currentSubject.getId(), info, story, chara, visual, atmos, love, currentTotalScore);
-
+            statusMessageLabel.setText("保存成功");
         } catch (NumberFormatException e) {
-            showAlert("输入错误", "请确保所有评分字段都输入了有效的数字！");
+            statusMessageLabel.setText("输入错误：请填写有效数字");
         } catch (Exception e) {
-            showAlert("错误", "更新失败：" + e.getMessage());
+            statusMessageLabel.setText("保存失败：" + e.getMessage());
         }
     }
 
@@ -435,6 +596,25 @@ public class SubjectController implements Initializable {
         atmosphereField.setText("0.0");
         loveField.setText("0.0");
         onCalculateAndSaveClick();
+    }
+
+    @FXML
+    private void toggleLogDrawer() {
+        logDrawerVisible = !logDrawerVisible;
+        logDrawer.setManaged(logDrawerVisible);
+        logDrawer.setVisible(logDrawerVisible);
+    }
+
+    @FXML
+    private void closeLogDrawer() {
+        logDrawerVisible = false;
+        logDrawer.setManaged(false);
+        logDrawer.setVisible(false);
+    }
+
+    @FXML
+    private void clearLog() {
+        LogCollector.getInstance().clear();
     }
 
     // 完整的雷达图绘制方法
@@ -543,32 +723,5 @@ public class SubjectController implements Initializable {
         gc.setFont(new Font("Microsoft YaHei", 12));
         gc.setTextAlign(TextAlignment.LEFT);
         gc.fillText(text, drawX + 10, drawY + 20);
-    }
-
-    private void showToast(String message) {
-        Window window = null;
-        if (radarCanvas.getScene() != null) {
-            window = radarCanvas.getScene().getWindow();
-        }
-        if (window == null) {
-            showAlert("提示", message);
-            return;
-        }
-        Popup popup = new Popup();
-        Label label = new Label(message);
-        label.setStyle("-fx-background-color: rgba(0,0,0,0.8); -fx-text-fill: white; -fx-padding: 10 20; -fx-background-radius: 30;");
-        popup.getContent().add(label);
-        popup.show(window);
-        PauseTransition delay = new PauseTransition(Duration.seconds(2));
-        delay.setOnFinished(e -> popup.hide());
-        delay.play();
-    }
-
-    private void showAlert(String title, String content) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(content);
-        alert.showAndWait();
     }
 }
