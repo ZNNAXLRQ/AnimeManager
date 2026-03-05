@@ -575,7 +575,7 @@ public class SubjectController implements Initializable {
 
             currentValues = new double[]{info, story, chara, love, visual, atmos};
 
-            Map<String, String> report = scoreCalculatorService.AnimeReport(info, story, chara, love, visual, atmos);
+            Map<String, String> report = scoreCalculatorService.AnimeReport(info, story, chara, visual, atmos, love);
             currentTotalScore = Double.parseDouble(report.get("totalScore"));
             totalScoreLabel.setText(String.valueOf(currentTotalScore));
 
@@ -584,7 +584,7 @@ public class SubjectController implements Initializable {
             adviceLabel.setText("建议: " + report.get("advice"));
 
             drawRadarChart(); // 更新雷达图
-            subjectService.UpdateSubject(currentSubject.getId(), info, story, chara, love, visual, atmos, currentTotalScore);
+            subjectService.UpdateSubject(currentSubject.getId(), info, story, chara, visual, atmos, love, currentTotalScore);
             statusMessageLabel.setText("保存成功");
         } catch (NumberFormatException e) {
             statusMessageLabel.setText("输入错误：请填写有效数字");
