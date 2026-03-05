@@ -64,15 +64,26 @@ public class MainController implements Initializable {
     private FilteredList<Subject> filteredSubjects;
     private boolean logDrawerVisible = false;
 
+    // 用于保存筛选和排序状态
+    private String savedSearchText = "";
+    private String savedFilterType = "Tag 标签";
+    private String savedFilterKeyword = "";
+    private String savedStartDate = "";
+    private String savedEndDate = "";
+    private String savedSortCriteria = "放送日期排序";
+    private boolean savedSortAscDesc = true;
+    private boolean restoringFromBack = false;
+
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         setupSortControls();
         setupFilterControls();
         setupListView();
         setupSearch();
+
         startDateField.setPromptText("起始日期 (如2026-03-05)");
         endDateField.setPromptText("结束日期 (如2026-03-05)");
-        loadSubjectsAsync(false);
+
         logListView.setItems(LogCollector.getInstance().getLogLines());
         logListView.setCellFactory(lv -> new ListCell<String>() {
             @Override
@@ -82,6 +93,20 @@ public class MainController implements Initializable {
                 else setText(item);
             }
         });
+
+        // 恢复排序控件
+        sortCombo.setValue(savedSortCriteria);
+        ascDescToggle.setSelected(savedSortAscDesc);
+        ascDescToggle.setText(savedSortAscDesc ? "逆序 (DESC)" : "顺序 (ASC)");
+
+        // 恢复筛选控件
+        filterTypeCombo.setValue(savedFilterType);
+        filterInput.setText(savedFilterKeyword);
+        startDateField.setText(savedStartDate);
+        endDateField.setText(savedEndDate);
+
+        // 触发一次筛选加载数据（内部会处理搜索恢复）
+        applyFiltersAsync();
     }
 
     private void setupSortControls() {
@@ -90,19 +115,23 @@ public class MainController implements Initializable {
         ascDescToggle.setSelected(true);
         ascDescToggle.setText("逆序 (DESC)");
 
-        sortCombo.setOnAction(e -> applySorting());
+        sortCombo.setOnAction(e -> {
+            savedSortCriteria = sortCombo.getValue();   // 保存
+            applySorting();
+        });
         ascDescToggle.setOnAction(e -> {
+            savedSortAscDesc = ascDescToggle.isSelected(); // 保存
             ascDescToggle.setText(ascDescToggle.isSelected() ? "逆序 (DESC)" : "顺序 (ASC)");
             applySorting();
         });
     }
 
     private void setupSearch() {
-        // 创建过滤列表并绑定到 ListView
         filteredSubjects = new FilteredList<>(observableSubjects, p -> true);
         subjectListView.setItems(filteredSubjects);
 
         searchField.textProperty().addListener((obs, oldVal, newVal) -> {
+            savedSearchText = newVal;   // 保存当前搜索词
             filteredSubjects.setPredicate(subject -> {
                 if (newVal == null || newVal.isEmpty()) return true;
                 String lower = newVal.toLowerCase();
@@ -111,7 +140,6 @@ public class MainController implements Initializable {
                 return (cnName != null && cnName.toLowerCase().contains(lower)) ||
                         (name != null && name.toLowerCase().contains(lower));
             });
-            // 更新状态栏显示数量
             statusLabel.setText(filteredSubjects.size() + " 部番剧");
         });
     }
@@ -257,6 +285,10 @@ public class MainController implements Initializable {
         });
     }
 
+    public void setRestoringFromBack(boolean restoring) {
+        this.restoringFromBack = restoring;
+    }
+
     private void loadSubjectsAsync(boolean forceUpdate) {
         statusLabel.setText("加载中...");
         CompletableFuture.supplyAsync(() -> {
@@ -269,16 +301,21 @@ public class MainController implements Initializable {
         }));
     }
 
-    private void applyFiltersAsync() {
-        // 读取当前UI值
+    private CompletableFuture<Void> applyFiltersAsync() {
         String type = filterTypeCombo.getValue();
         String keyword = filterInput.getText();
         String start = startDateField.getText();
         String end = endDateField.getText();
 
+        // 保存当前筛选参数
+        savedFilterType = type;
+        savedFilterKeyword = keyword;
+        savedStartDate = start;
+        savedEndDate = end;
+
         statusLabel.setText("筛选数据中...");
-        CompletableFuture.supplyAsync(() -> {
-            // 1. 根据类型关键词获取基础列表
+
+        CompletableFuture<List<Subject>> future = CompletableFuture.supplyAsync(() -> {
             List<Subject> baseList;
             if (keyword != null && !keyword.trim().isEmpty()) {
                 baseList = switch (type) {
@@ -292,16 +329,23 @@ public class MainController implements Initializable {
                 baseList = subjectService.getAllSubjects();
             }
 
-            // 2. 应用日期范围过滤（内存过滤）
             if ((start != null && !start.trim().isEmpty()) ||
                     (end != null && !end.trim().isEmpty())) {
                 baseList = filterService.filterSubjectsByDateRange(baseList, start, end);
             }
             return baseList;
-        }).thenAccept(filtered -> Platform.runLater(() -> {
+        });
+
+        return future.thenAccept(filtered -> Platform.runLater(() -> {
             observableSubjects.setAll(filtered);
             applySorting();
             statusLabel.setText("筛选完成: " + filteredSubjects.size() + " 部番剧");
+
+            // 如果是从返回操作触发的恢复，则恢复搜索框文本
+            if (restoringFromBack) {
+                searchField.setText(savedSearchText);
+                restoringFromBack = false; // 重置标志
+            }
         }));
     }
 
@@ -337,11 +381,15 @@ public class MainController implements Initializable {
 
         updateTask.setOnSucceeded(e -> {
             statusLabel.setText("更新完成，正在刷新...");
-            // 清空所有筛选条件
             filterInput.clear();
             startDateField.clear();
             endDateField.clear();
-            // 重新加载全部数据（不使用筛选）
+            // 重置保存的状态
+            savedFilterKeyword = "";
+            savedStartDate = "";
+            savedEndDate = "";
+            savedSearchText = "";
+            // 重新加载全部数据
             loadSubjectsAsync(true);
         });
 

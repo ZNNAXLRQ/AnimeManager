@@ -92,7 +92,7 @@ public class DataImportService {
     private void initializeToken() {
         try {
             // 从配置文件读取令牌
-            this.accessToken = JsonConfigUtil.readToken("com/example/animemanager/Data/config.json");
+            this.accessToken = JsonConfigUtil.readToken("Data/config.json");
             if (accessToken != null && !accessToken.isEmpty()) {
                 this.hasToken = true;
                 log.info("检测到API令牌，已启用认证请求");
@@ -152,7 +152,7 @@ public class DataImportService {
             log.info("使用API令牌，请求频率较高（约60次/分钟）");
         }
 
-        String username = JsonConfigUtil.readUser("com/example/animemanager/Data/config.json");
+        String username = JsonConfigUtil.readUser("Data/config.json");
 
         if (username == null || username.isEmpty()) {
             log.error("用户名配置为空，跳过任务");

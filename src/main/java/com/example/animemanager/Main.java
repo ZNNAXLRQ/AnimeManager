@@ -12,8 +12,7 @@ import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.scheduling.annotation.EnableScheduling;
-
-import java.io.File;
+import java.io.InputStream;
 
 @SpringBootApplication
 @EnableScheduling // 开启定时任务
@@ -37,9 +36,9 @@ public class Main extends Application {
         fxmlLoader.setControllerFactory(context::getBean);
 
         Scene scene = new Scene(fxmlLoader.load(), 1200, 800);
-        File iconFile = new File("src/main/resources/com/example/animemanager/Data/icon.png");
-        if (iconFile.exists()) {
-            stage.getIcons().add(new Image(iconFile.toURI().toString()));
+        InputStream iconStream = getClass().getResourceAsStream("/Data/icon.png");
+        if (iconStream != null) {
+            stage.getIcons().add(new Image(iconStream));
         } else {
             System.err.println("图标文件未找到，使用默认图标");
         }

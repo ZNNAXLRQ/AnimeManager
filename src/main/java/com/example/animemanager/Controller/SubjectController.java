@@ -540,6 +540,10 @@ public class SubjectController implements Initializable {
     @FXML
     private void onBackClick() {
         try {
+            // 获取 MainController 实例，设置恢复标志
+            MainController mainController = Main.getContext().getBean(MainController.class);
+            mainController.setRestoringFromBack(true);
+
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/com/example/animemanager/FXML/main.fxml"));
             loader.setControllerFactory(Main.getContext()::getBean);
             Parent root = loader.load();

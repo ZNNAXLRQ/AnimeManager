@@ -175,8 +175,8 @@
                                 <resource>
                                     <directory>src/main/resources</directory>
                                     <includes>
-                                        <include>com/example/animemanager/Data/config.json</include>
-                                        <include>com/example/animemanager/Data/icon.png</include>
+                                        <include>Data/config.json</include>
+                                        <include>Data/icon.png</include>
                                     </includes>
                                 </resource>
                             </resources>
@@ -197,20 +197,12 @@
                         </goals>
                         <configuration>
                             <type>APP_IMAGE</type>
-                            <name>AnimeManager</name>
+                            <name>あにめManager</name>
                             <appVersion>1.0.0</appVersion>
                             <input>${project.build.directory}/app-input</input>
                             <mainJar>${project.build.finalName}.jar</mainJar>
-                            <mainClass>com.example.animemanager.AppLaunch</mainClass>
                             <destination>${project.build.directory}/jpackage</destination>
-                            <icon>src/main/resources/com/example/animemanager/Image/icon.ico</icon>
-                            <runtimeImage>C:\Program Files\Java\jdk-22</runtimeImage>
-                            <javaOptions>
-                                <option>--module-path="C:\Program Files\Java\javafx-sdk-22.0.1\lib"</option>
-                                <option>--add-modules=javafx.controls,javafx.fxml,javafx.web</option>
-                                <option>--add-opens=java.base/java.lang=ALL-UNNAMED</option>
-                                <option>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</option>
-                            </javaOptions>
+                            <icon>src/main/resources/Data/icon.ico</icon>
                         </configuration>
                     </execution>
                 </executions>

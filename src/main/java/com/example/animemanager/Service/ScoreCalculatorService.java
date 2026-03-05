@@ -30,7 +30,7 @@ public class ScoreCalculatorService {
     private static final double CURVE_POWER_DOWN = 0.6; // 下半区(0-5)减速指数
 
     static {
-        Map<String, Double> weights = JsonConfigUtil.readAnimeWeights("com/example/animemanager/Data/config.json");
+        Map<String, Double> weights = JsonConfigUtil.readAnimeWeights("Data/config.json");
         if (weights == null) weights = new HashMap<>();
 
         ANIME_WEIGHTS = weights;
