@@ -1,5 +1,6 @@
 package com.example.animemanager;
 
+import com.example.animemanager.Util.LogCollector;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
@@ -10,7 +11,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.scheduling.annotation.EnableScheduling; // 导入此包
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.io.File;
 
@@ -23,6 +24,7 @@ public class Main extends Application {
 
     @Override
     public void init() throws Exception {
+        LogCollector.getInstance();
         SpringApplication application = new SpringApplication(Main.class);
         application.setWebApplicationType(WebApplicationType.NONE);
         context = application.run();

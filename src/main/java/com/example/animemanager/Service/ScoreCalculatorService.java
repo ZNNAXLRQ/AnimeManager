@@ -164,31 +164,35 @@ public class ScoreCalculatorService {
         int n = scores.size();
         double mu = sum / n;
 
-        // 计算偏差项 Δ = Σ (s_i - μ) * |s_i - μ|
-        double delta = 0.0;
-        for (double s : scores) {
-            double diff = s - mu;
-            delta += diff * Math.abs(diff);
-        }
-
         // 新公式参数（可根据实际数据微调）
-        double alpha = 2.0;      // 稳定度影响系数
-        double beta = 0.5;       // 数量奖励系数
-        double maxScore = 115.0;
+        double a = 0.012;      // 作品数影响系数
+        double c = 0.05;       // 方差惩罚系数
+        double K = 500.0;      // 方差饱和常数
+        double alpha = 0.04;   // 偏移影响幅度
+        double beta = 0.0001;  // 偏移压缩系数
 
-        // 调整平均分（加入稳定度修正）
-        double adjustedMean = mu + alpha * delta / (maxScore * n);
-        // 数量奖励（对数增长）
-        double quantityBonus = beta * Math.log(n + 1);
+        // 作品数因子 f(N) = 1 + a * ln(1+N)
+        double f = 1 + a * Math.log(1 + n);
+
+        // 方差因子 g(V) = 1 - c * V/(V+K)
+        double sumSq = 0;
+        for (double s : scores) {
+            sumSq += (s - mu) * (s - mu);
+        }
+        double V = sumSq / n;
+        double g = 1 - c * V / (V + K);
+
+        // 偏移因子 h(u) = 1 + α * tanh(β * u)，其中 u = (Σ (s_i-60)^3)/n
+        double D = 0;
+        for (double s : scores) {
+            double diff = s - 60.0;
+            D += diff * diff * diff; // 立方放大
+        }
+        double u = D / n;
+        double h = 1 + alpha * Math.tanh(beta * u);
+
         // 综合原始分
-        double raw = adjustedMean + quantityBonus;
-        // 线性映射到百分制
-        double score = raw * 100.0 / maxScore;
-
-        // 边界裁剪
-        if (score < 0) score = 0;
-        if (score > 100) score = 100;
-        return score;
+        return mu * f * g * h;
     }
 
     public double calculateBangumiLevel(List<Subject> subjects) {
@@ -225,31 +229,31 @@ public class ScoreCalculatorService {
         int n = scores.size();
         double mu = sum / n;
 
-        // 计算偏差项 Δ = Σ (s_i - μ) * |s_i - μ|
-        double delta = 0.0;
+        // 新公式参数（与上同）
+        double a = 0.012;
+        double c = 0.05;
+        double K = 500.0;
+        double alpha = 0.04;
+        double beta = 0.0001;
+
+        double f = 1 + a * Math.log(1 + n);
+
+        double sumSq = 0;
         for (double s : scores) {
-            double diff = s - mu;
-            delta += diff * Math.abs(diff);
+            sumSq += (s - mu) * (s - mu);
         }
+        double V = sumSq / n;
+        double g = 1 - c * V / (V + K);
 
-        // 新公式参数
-        double alpha = 2.0;      // 稳定度影响系数
-        double beta = 0.5;       // 数量奖励系数
-        double maxScore = 115.0;
+        double D = 0;
+        for (double s : scores) {
+            double diff = s - 60.0;
+            D += diff * diff * diff;
+        }
+        double u = D / n;
+        double h = 1 + alpha * Math.tanh(beta * u);
 
-        // 调整平均分
-        double adjustedMean = mu + alpha * delta / (maxScore * n);
-        // 数量奖励
-        double quantityBonus = beta * Math.log(n + 1);
-        // 综合原始分
-        double raw = adjustedMean + quantityBonus;
-        // 线性映射到百分制
-        double score = raw * 100.0 / maxScore;
-
-        // 边界裁剪
-        if (score < 0) score = 0;
-        if (score > 100) score = 100;
-        return score;
+        return mu * f * g * h;
     }
 
     public String getScoreDescription(double rawScore) {

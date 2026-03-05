@@ -371,6 +371,7 @@ public class SubjectController implements Initializable {
 
     private void loadAllTags() {
         allTags.setAll(tagRepository.findAll());
+        allTags.sort(Comparator.comparing(Tag::getCount).reversed());
     }
 
     private void setupTagDrawer() {
