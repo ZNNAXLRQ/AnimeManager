@@ -216,6 +216,7 @@ public class SubjectController implements Initializable {
     private void loadTags() {
         List<Tag> tagList = currentSubject.getTags();
         if (tagList == null) tagList = new ArrayList<>();
+        tagList.sort(Comparator.comparing(Tag::getCount).reversed());
         tagListView.setItems(FXCollections.observableArrayList(tagList));
         tagListView.setCellFactory(lv -> new ListCell<Tag>() {
             @Override
@@ -561,20 +562,20 @@ public class SubjectController implements Initializable {
             double info = Double.parseDouble(infoField.getText());
             double story = Double.parseDouble(storyField.getText());
             double chara = Double.parseDouble(characterField.getText());
+            double love = Double.parseDouble(loveField.getText());
             double visual = Double.parseDouble(visualField.getText());
             double atmos = Double.parseDouble(atmosphereField.getText());
-            double love = Double.parseDouble(loveField.getText());
 
             info = Math.max(0, Math.min(10, info));
             story = Math.max(0, Math.min(10, story));
             chara = Math.max(0, Math.min(10, chara));
+            love = Math.max(0, Math.min(10, love));
             visual = Math.max(0, Math.min(10, visual));
             atmos = Math.max(0, Math.min(10, atmos));
-            love = Math.max(0, Math.min(10, love));
 
-            currentValues = new double[]{info, story, chara, visual, atmos, love};
+            currentValues = new double[]{info, story, chara, love, visual, atmos};
 
-            Map<String, String> report = scoreCalculatorService.AnimeReport(info, story, chara, visual, atmos, love);
+            Map<String, String> report = scoreCalculatorService.AnimeReport(info, story, chara, love, visual, atmos);
             currentTotalScore = Double.parseDouble(report.get("totalScore"));
             totalScoreLabel.setText(String.valueOf(currentTotalScore));
 
@@ -583,7 +584,7 @@ public class SubjectController implements Initializable {
             adviceLabel.setText("建议: " + report.get("advice"));
 
             drawRadarChart(); // 更新雷达图
-            subjectService.UpdateSubject(currentSubject.getId(), info, story, chara, visual, atmos, love, currentTotalScore);
+            subjectService.UpdateSubject(currentSubject.getId(), info, story, chara, love, visual, atmos, currentTotalScore);
             statusMessageLabel.setText("保存成功");
         } catch (NumberFormatException e) {
             statusMessageLabel.setText("输入错误：请填写有效数字");
@@ -597,9 +598,9 @@ public class SubjectController implements Initializable {
         infoField.setText("0.0");
         storyField.setText("0.0");
         characterField.setText("0.0");
+        loveField.setText("0.0");
         visualField.setText("0.0");
         atmosphereField.setText("0.0");
-        loveField.setText("0.0");
         onCalculateAndSaveClick();
     }
 
