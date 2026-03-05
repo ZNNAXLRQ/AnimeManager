@@ -182,7 +182,7 @@ totalScore = BASE_SCORE + infoScore + performanceScore
    ```
     - 令牌可在 [Bangumi AccessToken页面](https://next.bgm.tv/demo/access-token/create) 获取。
 2. **运行程序**：
-    - 直接运行 `AppLaunch.main()`
+    - 直接运行 `あにめManager.exe`
 3. **首次使用**：点击主界面“更新数据”按钮，程序将开始同步你的收藏列表（可能需要较长时间，取决于收藏数量）。
 4. **浏览与评分**：
     - 点击列表中的条目进入详情页。
