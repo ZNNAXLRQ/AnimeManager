@@ -38,7 +38,9 @@ public class DataImportService {
     private final RestTemplate restTemplate;
     private final ExecutorService executor;
     private String accessToken;
+    private String username;
     private boolean hasToken = false;
+    private boolean hasUsername = false;
 
     // 配置常量
     private static final int BATCH_SIZE = 10;
@@ -93,17 +95,25 @@ public class DataImportService {
         try {
             // 从配置文件读取令牌
             this.accessToken = JsonConfigUtil.readToken("Data/config.json");
+            this.username = JsonConfigUtil.readUser("Data/config.json");
             if (accessToken != null && !accessToken.isEmpty()) {
                 this.hasToken = true;
                 log.info("检测到API令牌，已启用认证请求");
             } else {
                 log.warn("未检测到API令牌，将使用匿名请求（可能被限流）");
                 log.info("如需提高请求频率，请访问 https://bgm.tv/dev/app 创建应用并获取令牌");
-                log.info("将access_token添加到config.json文件中");
+                log.info("将token添加到config.json文件中");
                 this.hasToken = false;
             }
+            if (username != null && !username.isEmpty()) {
+                this.hasUsername = true;
+                log.info("检测到用户" + username);
+            } else {
+                log.warn("未设置用户, 请尽快设置用户名");
+                log.info("将Bangumi账号填入config.json文件中");
+            }
         } catch (Exception e) {
-            log.error("初始化令牌失败: {}", e.getMessage());
+            log.error("初始化设置失败: {}", e.getMessage());
             this.hasToken = false;
         }
     }
@@ -152,9 +162,7 @@ public class DataImportService {
             log.info("使用API令牌，请求频率较高（约60次/分钟）");
         }
 
-        String username = JsonConfigUtil.readUser("Data/config.json");
-
-        if (username == null || username.isEmpty()) {
+        if (!hasUsername) {
             log.error("用户名配置为空，跳过任务");
             log.error("请在config.json中添加username字段");
             return;

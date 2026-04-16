@@ -30,11 +30,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
-import javafx.stage.Modality;
-import javafx.stage.Popup;
 import javafx.stage.Stage;
-import javafx.stage.Window;
-import javafx.util.Duration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 
@@ -99,7 +95,7 @@ public class SubjectController implements Initializable {
     private boolean deleteMode = false;
 
     private double[] currentValues = {5.0, 5.0, 5.0, 5.0, 5.0, 5.0};
-    private final String[] LABELS = {"信息", "故事", "人物", "喜爱", "视听", "氛围"};
+    private final String[] LABELS = {"信息", "故事", "角色", "喜爱", "视听", "氛围"};
     private final ObservableList<Tag> allTags = FXCollections.observableArrayList();
     private final Set<Long> selectedTagIds = new HashSet<>();
     private final Set<Long> selectedForDeletionIds = new HashSet<>();

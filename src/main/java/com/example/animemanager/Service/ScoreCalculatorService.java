@@ -30,15 +30,23 @@ public class ScoreCalculatorService {
     private static final double CURVE_POWER_DOWN = 0.6; // 下半区(0-5)减速指数
 
     static {
-        Map<String, Double> weights = JsonConfigUtil.readAnimeWeights("Data/config.json");
-        if (weights == null) weights = new HashMap<>();
-
+        Map<String, Double> weights = null;
+        try {
+            weights = JsonConfigUtil.readAnimeWeights("Data/config.json");
+        } catch (Exception e) {
+            System.err.println("读取权重配置文件失败，使用默认权重: " + e.getMessage());
+            weights = new HashMap<>();
+        }
+        if (weights == null || weights.isEmpty()) {
+            weights = new HashMap<>();
+        }
         ANIME_WEIGHTS = weights;
         WEIGHT_STORY = ANIME_WEIGHTS.getOrDefault("story", 0.25);
         WEIGHT_CHARACTER = ANIME_WEIGHTS.getOrDefault("character", 0.20);
         WEIGHT_VISUAL = ANIME_WEIGHTS.getOrDefault("visual", 0.20);
         WEIGHT_ATMOSPHERE = ANIME_WEIGHTS.getOrDefault("atmosphere", 0.20);
         WEIGHT_LOVE = ANIME_WEIGHTS.getOrDefault("love", 0.15);
+        System.out.println("当前权重: " + ANIME_WEIGHTS);
     }
 
     public ScoreCalculatorService() {
@@ -76,7 +84,7 @@ public class ScoreCalculatorService {
         double totalScore = BASE_SCORE + infoScore + performanceScore;
         if (info < 5.0) {
             // 信息量总分打折
-            totalScore *= 0.8;
+            totalScore *= 0.9;
         }
         // 7. 最终兜底，确保不低于BASE
         return Math.max(BASE_SCORE, totalScore);
@@ -89,20 +97,20 @@ public class ScoreCalculatorService {
         double temp = 0;
 
         // 评级系统 (115分制)
-        if (totalScore >= 105) {
+        if (totalScore >= 110) {
             grade = "✦ 神作 ✦";
             comment = "难以超越的巅峰之作";
-            temp = (totalScore - 105) / 10 + 10.0;
+            temp = (totalScore - 110) / 10 + 10.0;
             advice = "bangumi-" + String.format("%.3f", temp);
-        } else if (totalScore >= 95) {
+        } else if (totalScore >= 100) {
             grade = "★ 准神作 ★";
             comment = "绝对能打的顶尖之作";
-            temp = (totalScore - 95) / 10 + 9.0;
+            temp = (totalScore - 100) / 10 + 9.0;
             advice = "bangumi-" + String.format("%.3f", temp);
         } else if (totalScore >= 85) {
             grade = "★★★★★";
             comment = "不得不看的杰出之作";
-            temp = (totalScore - 85) / 10 + 8.0;
+            temp = (totalScore - 85) / 15 + 8.0;
             advice = "bangumi-" + String.format("%.3f", temp);
         } else if (totalScore >= 70) {
             grade = "★★★★☆";
@@ -205,23 +213,23 @@ public class ScoreCalculatorService {
             double rating = subject.getRating().getScore() + 0.5;
             double num = 0;
             if (rating >= 10) {
-                num = 115 - (10.5 - rating) / 0.5 * 10;
+                num = 110 + (rating - 10.0) * 10;
             } else if (rating >= 9) {
-                num = 105 - (10 - rating) * 10;
+                num = 100 + (rating - 9.0) * 15;
             } else if (rating >= 8) {
-                num = 95 - (9 - rating) * 10;
+                num = 85 + (rating - 8.0) * 10;
             } else if (rating >= 7) {
-                num = 85 - (8 - rating) * 15;
+                num = 70 + (rating - 7.0) * 15;
             } else if (rating >= 6) {
-                num = 70 - (7 - rating) * 10;
+                num = 60 + (rating - 6.0) * 10;
             } else if (rating >= 5) {
-                num = 60 - (5 - rating) * 12;
+                num = 48 + (rating - 5.0) * 12;
             } else if (rating >= 4) {
-                num = 48 - (4 - rating) * 16;
+                num = 32 + (rating - 4.0) * 16;
             } else if (rating >= 3) {
-                num = 32 - (3 - rating) * 8;
+                num = 24 + (rating - 3.0) * 8;
             } else {
-                num = 10 + (rating - 1.5) * 14;
+                num = 10 + (rating - 1.0) * 14;
             }
             scores.add(num);
             sum += num;
