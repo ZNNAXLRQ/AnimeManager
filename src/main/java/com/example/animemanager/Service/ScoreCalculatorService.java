@@ -107,20 +107,20 @@ public class ScoreCalculatorService {
             comment = "绝对能打的顶尖之作";
             temp = (totalScore - 100) / 10 + 9.0;
             advice = "bangumi-" + String.format("%.3f", temp);
-        } else if (totalScore >= 85) {
+        } else if (totalScore >= 90) {
             grade = "★★★★★";
             comment = "不得不看的杰出之作";
-            temp = (totalScore - 85) / 15 + 8.0;
+            temp = (totalScore - 90) / 10 + 8.0;
             advice = "bangumi-" + String.format("%.3f", temp);
-        } else if (totalScore >= 70) {
+        } else if (totalScore >= 75) {
             grade = "★★★★☆";
             comment = "值得一看的优秀之作";
-            temp = (totalScore - 70) / 15 + 7.0;
+            temp = (totalScore - 75) / 15 + 7.0;
             advice = "bangumi-" + String.format("%.3f", temp);
         } else if (totalScore >= 60) {
             grade = "★★★☆☆";
             comment = "可以去看的不错之作";
-            temp = (totalScore - 60) / 10 + 6.0;
+            temp = (totalScore - 60) / 15 + 6.0;
             advice = "bangumi-" + String.format("%.3f", temp);
         } else if (totalScore >= 48) {
             grade = "★★☆☆☆";
@@ -140,7 +140,7 @@ public class ScoreCalculatorService {
         } else {
             grade = "☆ 纯石 ☆";
             comment = "怀疑人生的逆天之作";
-            temp = totalScore / 14 + 1.0;
+            temp = (totalScore - 10) / 7 + 1.0;
             advice = "bangumi-" + String.format("%.3f", temp);
         }
 
@@ -215,13 +215,13 @@ public class ScoreCalculatorService {
             if (rating >= 10) {
                 num = 110 + (rating - 10.0) * 10;
             } else if (rating >= 9) {
-                num = 100 + (rating - 9.0) * 15;
+                num = 100 + (rating - 9.0) * 10;
             } else if (rating >= 8) {
-                num = 85 + (rating - 8.0) * 10;
+                num = 90 + (rating - 8.0) * 10;
             } else if (rating >= 7) {
-                num = 70 + (rating - 7.0) * 15;
+                num = 75 + (rating - 7.0) * 15;
             } else if (rating >= 6) {
-                num = 60 + (rating - 6.0) * 10;
+                num = 60 + (rating - 6.0) * 15;
             } else if (rating >= 5) {
                 num = 48 + (rating - 5.0) * 12;
             } else if (rating >= 4) {
@@ -229,7 +229,7 @@ public class ScoreCalculatorService {
             } else if (rating >= 3) {
                 num = 24 + (rating - 3.0) * 8;
             } else {
-                num = 10 + (rating - 1.0) * 14;
+                num = 10 + (rating - 1.0) * 7;
             }
             scores.add(num);
             sum += num;
@@ -265,20 +265,38 @@ public class ScoreCalculatorService {
     }
 
     public String getScoreDescription(double rawScore) {
-        int scoreInt = (int) Math.round(rawScore);
-        return switch (scoreInt) {
-            case 10 -> "巅峰";
-            case 9 -> "惊艳";
-            case 8 -> "杰出";
-            case 7 -> "优秀";
-            case 6 -> "不错";
-            case 5 -> "合格";
-            case 4 -> "较差";
-            case 3 -> "极差";
-            case 2 -> "纯石";
-            case 1 -> "逆天";
-            default -> rawScore >= 0 ? "无敌" : "未知";
-        };
+        String res = "未知";
+        if (rawScore >= 9.5) {
+            res = "巅峰";
+        }
+        else if (rawScore >= 9.0) {
+            res = "惊艳";
+        }
+        else if (rawScore >= 8.0) {
+            res = "杰出";
+        }
+        else if (rawScore >= 7.0) {
+            res = "优秀";
+        }
+        else if (rawScore >= 6.0) {
+            res = "不错";
+        }
+        else if (rawScore >= 5.0) {
+            res = "合格";
+        }
+        else if (rawScore >= 3.5) {
+            res = "较差";
+        }
+        else if (rawScore >= 2.0) {
+            res = "极差";
+        }
+        else if (rawScore >= 1.0) {
+            res = "纯石";
+        }
+        else if (rawScore > 0.0) {
+            res = "无敌";
+        }
+        return res;
     }
 
     private double correctScore(double rawScore) {

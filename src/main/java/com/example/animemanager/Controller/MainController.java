@@ -28,9 +28,12 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
+import java.io.ByteArrayInputStream;
 import java.net.URL;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -58,9 +61,20 @@ public class MainController implements Initializable {
     @Autowired private DataImportService dataImportService;
     @Autowired private FilterService filterService;
     @Autowired private ScoreCalculatorService scoreCalculatorService;
+    @Autowired private RestTemplate restTemplate;
 
     private static final Map<String, Image> IMAGE_CACHE = new ConcurrentHashMap<>();
     private final ObservableList<Subject> observableSubjects = FXCollections.observableArrayList();
+    private static final Image PLACEHOLDER_IMAGE;
+    static {
+        Image temp = null;
+        try {
+            temp = new Image(MainController.class.getResourceAsStream("/Data/placeholder.png"));
+        } catch (Exception e) {
+            // 忽略，保持 temp = null
+        }
+        PLACEHOLDER_IMAGE = temp;
+    }
     private FilteredList<Subject> filteredSubjects;
     private boolean logDrawerVisible = false;
 
@@ -107,6 +121,15 @@ public class MainController implements Initializable {
 
         // 触发一次筛选加载数据（内部会处理搜索恢复）
         applyFiltersAsync();
+    }
+
+    private void setPlaceholder(ImageView imageView) {
+        if (PLACEHOLDER_IMAGE != null) {
+            imageView.setImage(PLACEHOLDER_IMAGE);
+        } else {
+            // 如果没有占位图，可以清空图片或设置一个纯色矩形
+            imageView.setImage(null);
+        }
     }
 
     private void setupSortControls() {
@@ -270,9 +293,33 @@ public class MainController implements Initializable {
                         if (IMAGE_CACHE.containsKey(imageUrl)) {
                             imageView.setImage(IMAGE_CACHE.get(imageUrl));
                         } else {
-                            Image poster = new Image(imageUrl, true);
-                            IMAGE_CACHE.put(imageUrl, poster);
-                            imageView.setImage(poster);
+                            final String finalUrl = imageUrl;
+                            // 先显示占位图（或空白）
+                            if (PLACEHOLDER_IMAGE != null) {
+                                imageView.setImage(PLACEHOLDER_IMAGE);
+                            } else {
+                                imageView.setImage(null);
+                            }
+                            Thread t = new Thread(() -> {
+                                try {
+                                    ResponseEntity<byte[]> response = restTemplate.getForEntity(finalUrl, byte[].class);
+                                    if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                                        Image img = new Image(new ByteArrayInputStream(response.getBody()));
+                                        IMAGE_CACHE.put(finalUrl, img);
+                                        Platform.runLater(() -> {
+                                            if (getItem() == subject) {
+                                                imageView.setImage(img);
+                                            }
+                                        });
+                                    } else {
+                                        // 静默失败
+                                    }
+                                } catch (Exception e) {
+                                    // 静默失败
+                                }
+                            });
+                            t.setDaemon(true);   // 设置为守护线程
+                            t.start();
                         }
                     } else {
                         imageView.setImage(null);

@@ -2,6 +2,7 @@ package com.example.animemanager;
 
 import com.example.animemanager.Util.LogCollector;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import javafx.scene.image.Image;
@@ -49,7 +50,17 @@ public class Main extends Application {
 
     @Override
     public void stop() throws Exception {
-        context.close();
+        if (context != null && context.isRunning()) {
+            context.close();
+        }
+        Platform.exit();
+        // 可选：如果 1 秒后仍未退出，强制终止
+        new Thread(() -> {
+            try {
+                Thread.sleep(1000);
+                System.exit(0);
+            } catch (InterruptedException ignored) {}
+        }).start();
     }
 
     public static void main(String[] args) {

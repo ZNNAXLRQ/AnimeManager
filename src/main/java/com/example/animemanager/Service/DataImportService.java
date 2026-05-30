@@ -7,6 +7,7 @@ import com.example.animemanager.Repository.*;
 import com.example.animemanager.Util.JsonConfigUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.*;
 import org.springframework.transaction.annotation.Propagation;
@@ -35,7 +36,6 @@ public class DataImportService {
     private final EpisodeRepository episodeRepository;
     private final InfoboxRepository infoboxRepository;
 
-    private final RestTemplate restTemplate;
     private final ExecutorService executor;
     private String accessToken;
     private String username;
@@ -43,10 +43,10 @@ public class DataImportService {
     private boolean hasUsername = false;
 
     // 配置常量
-    private static final int BATCH_SIZE = 10;
+    private static final int BATCH_SIZE = 20;
     private static final long REQUEST_TIMEOUT = 60000;
     private static final int MAX_RETRIES = 3;
-    private static final long BATCH_INTERVAL_MS = 5000;
+    private static final long BATCH_INTERVAL_MS = 500;
     private static final long REQUEST_INTERVAL_MS = 2000;
 
     @Autowired
@@ -57,6 +57,9 @@ public class DataImportService {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;  // 用于执行 MERGE 操作
+
+    @Autowired
+    private RestTemplate restTemplate;
 
     @Autowired
     public DataImportService(
@@ -70,10 +73,11 @@ public class DataImportService {
         this.personRepository = personRepository;
         this.episodeRepository = episodeRepository;
         this.infoboxRepository = infoboxRepository;
+
         // 1. 初始化令牌
         initializeToken();
 
-        // 2. 配置线程池
+        // 2. 配置线程池（保持不变）
         int corePoolSize = Math.min(4, Runtime.getRuntime().availableProcessors());
         int maxPoolSize = corePoolSize * 2;
         this.executor = new ThreadPoolExecutor(
@@ -83,12 +87,6 @@ public class DataImportService {
                 new LinkedBlockingQueue<>(100),
                 new ThreadPoolExecutor.CallerRunsPolicy()
         );
-
-        // 3. 配置RestTemplate
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(10000);
-        factory.setReadTimeout(60000);
-        this.restTemplate = new RestTemplate(factory);
     }
 
     private void initializeToken() {
@@ -120,7 +118,7 @@ public class DataImportService {
 
     private HttpHeaders createHeaders() {
         HttpHeaders headers = new HttpHeaders();
-        headers.set("User-Agent", "AnimeManager/1.0 (https://github.com/ZNNAXLRQ/AnimeManager)");
+        headers.set("User-Agent", "ZNNAXLRQ/AnimeManager (https://github.com/ZNNAXLRQ/AnimeManager)");
         if (hasToken && accessToken != null) {
             headers.setBearerAuth(accessToken);
         }
@@ -356,7 +354,7 @@ public class DataImportService {
     private void smartSleep() {
         try {
             // 如果有令牌，间隔短一点；无令牌间隔长一点
-            long sleepTime = hasToken ? 500 : 1500;
+            long sleepTime = hasToken ? 700 : 2000;
             Thread.sleep(sleepTime);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -889,17 +887,19 @@ public class DataImportService {
         }
     }
 
+    @PreDestroy
     public void shutdown() {
-        log.info("关闭数据导入服务...");
-        executor.shutdown();
-        try {
-            if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+        log.info("关闭 DataImportService 线程池...");
+        if (executor != null && !executor.isShutdown()) {
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
                 executor.shutdownNow();
+                Thread.currentThread().interrupt();
             }
-        } catch (InterruptedException e) {
-            executor.shutdownNow();
-            Thread.currentThread().interrupt();
         }
-        log.info("数据导入服务已关闭");
     }
 }

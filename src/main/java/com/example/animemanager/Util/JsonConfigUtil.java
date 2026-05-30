@@ -142,4 +142,12 @@ public final class JsonConfigUtil {
         }
         return token;
     }
+
+    @SuppressWarnings("unchecked")
+    public static String readProxy(String fileName) {
+        System.out.println("代理设置读取中");
+        Map<String, Object> config = readConfig(fileName);
+        Object proxy = config.get("proxy");
+        return proxy != null ? proxy.toString() : null;
+    }
 }

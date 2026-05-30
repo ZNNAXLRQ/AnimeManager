@@ -172,10 +172,24 @@
 
                         <!-- 雷达图 -->
                         <HBox spacing="20" alignment="CENTER">
-                            <VBox spacing="20" alignment="CENTER">
-                                <Canvas fx:id="radarCanvas" width="320" height="320"/>
-                                <Label text="评分雷达图" styleClass="radar-title"/>
-                            </VBox>
+                            <HBox spacing="30" alignment="CENTER">
+                                <VBox spacing="10" alignment="CENTER">
+                                    <Canvas fx:id="radarCanvas" width="320" height="320"/>
+                                    <Label text="评分雷达图" styleClass="radar-title"/>
+                                </VBox>
+                                <VBox alignment="CENTER_LEFT" styleClass="result-box">
+                                    <Label text="巅峰: 9.5 - 10.0" styleClass="input-label"/>
+                                    <Label text="惊艳: 9.0 -   9.5" styleClass="input-label"/>
+                                    <Label text="杰出: 8.0 -   9.0" styleClass="input-label"/>
+                                    <Label text="优秀: 7.0 -   8.0" styleClass="input-label"/>
+                                    <Label text="不错: 6.0 -   7.0" styleClass="input-label"/>
+                                    <Label text="合格: 5.0 -   6.0" styleClass="input-label"/>
+                                    <Label text="较差: 3.5 -   5.0" styleClass="input-label"/>
+                                    <Label text="极差: 2.0 -   3.5" styleClass="input-label"/>
+                                    <Label text="纯石: 1.0 -   2.0" styleClass="input-label"/>
+                                    <Label text="无敌: 0.0 -   1.0" styleClass="input-label"/>
+                                </VBox>
+                            </HBox>
                         </HBox>
                     </VBox>
                 </HBox>

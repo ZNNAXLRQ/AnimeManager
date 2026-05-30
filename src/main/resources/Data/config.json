@@ -1,6 +1,7 @@
 {
   "username": "",
   "token": "",
+  "proxy":"",
   "anime_weights": {
     "story":0.25,
     "character":0.20,

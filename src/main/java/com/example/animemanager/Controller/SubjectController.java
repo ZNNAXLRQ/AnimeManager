@@ -7,7 +7,7 @@ import com.example.animemanager.Repository.*;
 import com.example.animemanager.Service.ScoreCalculatorService;
 import com.example.animemanager.Service.SubjectService;
 import com.example.animemanager.Util.LogCollector;
-import javafx.animation.PauseTransition;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
@@ -32,8 +32,11 @@ import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
 import javafx.stage.Stage;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.client.RestTemplate;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URL;
 import java.util.*;
@@ -44,6 +47,7 @@ public class SubjectController implements Initializable {
 
     @Autowired private SubjectService subjectService;
     @Autowired private ScoreCalculatorService scoreCalculatorService;
+    @Autowired private RestTemplate restTemplate;
     @Autowired private InfoboxRepository infoboxRepository;
     @Autowired private TagRepository tagRepository;
     @Autowired private CharacterRepository characterRepository;
@@ -145,6 +149,26 @@ public class SubjectController implements Initializable {
         });
     }
 
+    private void loadImageWithProxy(String imageUrl) {
+        if (imageUrl == null) return;
+        poster.setImage(null);
+        Thread t = new Thread(() -> {
+            try {
+                ResponseEntity<byte[]> response = restTemplate.getForEntity(imageUrl, byte[].class);
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    Image img = new Image(new ByteArrayInputStream(response.getBody()));
+                    Platform.runLater(() -> poster.setImage(img));
+                } else {
+                    Platform.runLater(() -> poster.setImage(null));
+                }
+            } catch (Exception e) {
+                Platform.runLater(() -> poster.setImage(null));
+            }
+        });
+        t.setDaemon(true);   // 设置为守护线程
+        t.start();
+    }
+
     private void setupEnterKeyHandlers() {
         TextField[] fields = {infoField, storyField, characterField, visualField, atmosphereField, loveField};
         for (TextField field : fields) {
@@ -162,7 +186,7 @@ public class SubjectController implements Initializable {
         summaryArea.setText(subject.getSummary());
 
         if (subject.getImages() != null && subject.getImages().getSmall() != null) {
-            poster.setImage(new Image(subject.getImages().getSmall(), true));
+            loadImageWithProxy(subject.getImages().getSmall());
         }
 
         // 加载评分数据
