@@ -75,7 +75,7 @@ public final class JsonConfigUtil {
                 }
             }
         } catch (Exception e) {
-            System.err.println("解析 CodeSource 失败: " + e.getMessage());
+            System.err.println("[readConfig] 解析 CodeSource 失败: " + e.getMessage());
         }
 
         // 3. 回退到用户工作目录
@@ -102,50 +102,50 @@ public final class JsonConfigUtil {
         try (InputStream inputStream = JsonConfigUtil.class.getClassLoader()
                 .getResourceAsStream(fileName)) {
             if (inputStream == null) {
-                throw new IOException("找不到配置文件: " + fileName);
+                throw new IOException("[readConfig] 找不到配置文件: " + fileName);
             }
             return MAPPER.readValue(inputStream, new TypeReference<>() {});
         } catch (IOException e) {
-            throw new RuntimeException("读取配置文件失败: " + fileName, e);
+            throw new RuntimeException("[readConfig] 读取配置文件失败: " + fileName, e);
         }
     }
 
     @SuppressWarnings("unchecked")
     public static Map<String, Double> readAnimeWeights(String fileName) {
-        System.out.println("权重设置读取中");
+        System.out.println("[readConfig] 权重设置读取中");
         Map<String, Object> config = readConfig(fileName);
         Object weights = config.get("anime_weights");
         if (weights == null) {
-            throw new RuntimeException("配置文件不包含weights字段: " + fileName);
+            throw new RuntimeException("[ScoreService] 配置文件不包含weights字段: " + fileName);
         }
         return Collections.unmodifiableMap((Map<String, Double>) weights);
     }
 
     @SuppressWarnings("unckecked")
     public static String readUser(String fileName) {
-        System.out.println("用户设置读取中");
+        System.out.println("[readConfig] 用户设置读取中");
         Map<String, Object> config = readConfig(fileName);
         String account = (String) config.get("username");
         if (account == null) {
-            throw new RuntimeException("未配置账号: " + fileName);
+            throw new RuntimeException("[DataImport] 未配置账号: " + fileName);
         }
         return account;
     }
 
     @SuppressWarnings("unchecked")
     public static String readToken(String fileName) {
-        System.out.println("令牌设置读取中");
+        System.out.println("[readConfig] 令牌设置读取中");
         Map<String, Object> config = readConfig(fileName);
         String token = (String) config.get("token");
         if (token == null) {
-            throw new RuntimeException("未配置个人令牌: " + fileName);
+            throw new RuntimeException("[DataImport] 未配置个人令牌: " + fileName);
         }
         return token;
     }
 
     @SuppressWarnings("unchecked")
     public static String readProxy(String fileName) {
-        System.out.println("代理设置读取中");
+        System.out.println("[readConfig] 代理设置读取中");
         Map<String, Object> config = readConfig(fileName);
         Object proxy = config.get("proxy");
         return proxy != null ? proxy.toString() : null;

@@ -12,9 +12,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.http.*;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.transaction.annotation.Transactional;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -23,11 +21,12 @@ import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.text.ParseException;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Service
 public class DataImportService {
     private final SubjectRepository subjectRepository;
@@ -39,24 +38,23 @@ public class DataImportService {
     private final ExecutorService executor;
     private String accessToken;
     private String username;
+    private String proxy;
     private boolean hasToken = false;
     private boolean hasUsername = false;
+    private boolean hasProxy = false;
 
-    // 配置常量
     private static final int BATCH_SIZE = 20;
     private static final long REQUEST_TIMEOUT = 60000;
     private static final int MAX_RETRIES = 3;
     private static final long BATCH_INTERVAL_MS = 500;
-    private static final long REQUEST_INTERVAL_MS = 2000;
 
     @Autowired
     @Lazy
     private DataImportService self;
-    private final Object SHARED_ENTITY_LOCK = new Object();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
-    private JdbcTemplate jdbcTemplate;  // 用于执行 MERGE 操作
+    private JdbcTemplate jdbcTemplate;
 
     @Autowired
     private RestTemplate restTemplate;
@@ -74,10 +72,9 @@ public class DataImportService {
         this.episodeRepository = episodeRepository;
         this.infoboxRepository = infoboxRepository;
 
-        // 1. 初始化令牌
         initializeToken();
+        testProxyIfNeeded();
 
-        // 2. 配置线程池（保持不变）
         int corePoolSize = Math.min(4, Runtime.getRuntime().availableProcessors());
         int maxPoolSize = corePoolSize * 2;
         this.executor = new ThreadPoolExecutor(
@@ -91,28 +88,58 @@ public class DataImportService {
 
     private void initializeToken() {
         try {
-            // 从配置文件读取令牌
             this.accessToken = JsonConfigUtil.readToken("Data/config.json");
             this.username = JsonConfigUtil.readUser("Data/config.json");
             if (accessToken != null && !accessToken.isEmpty()) {
                 this.hasToken = true;
-                log.info("检测到API令牌，已启用认证请求");
+                System.out.println("[DataImport] 检测到API令牌，已启用认证请求");
             } else {
-                log.warn("未检测到API令牌，将使用匿名请求（可能被限流）");
-                log.info("如需提高请求频率，请访问 https://bgm.tv/dev/app 创建应用并获取令牌");
-                log.info("将token添加到config.json文件中");
+                System.out.println("[DataImport] 未检测到API令牌，将使用匿名请求（可能被限流）");
+                System.out.println("[DataImport] 如需提高请求频率，请访问 https://bgm.tv/dev/app 创建应用并获取令牌");
+                System.out.println("[DataImport] 将token添加到config.json文件中");
                 this.hasToken = false;
             }
             if (username != null && !username.isEmpty()) {
                 this.hasUsername = true;
-                log.info("检测到用户" + username);
+                System.out.println("[DataImport] 检测到用户 " + username);
             } else {
-                log.warn("未设置用户, 请尽快设置用户名");
-                log.info("将Bangumi账号填入config.json文件中");
+                System.out.println("[DataImport] 未设置用户, 请尽快设置用户名");
+                System.out.println("[DataImport] 将Bangumi账号填入config.json文件中");
             }
         } catch (Exception e) {
-            log.error("初始化设置失败: {}", e.getMessage());
+            System.err.println("[DataImport] 初始化设置失败: " + e.getMessage());
             this.hasToken = false;
+        }
+    }
+
+    private void testProxyIfNeeded() {
+        // 读取代理配置
+        this.proxy = JsonConfigUtil.readProxy("Data/config.json");
+        if (proxy != null && !proxy.isEmpty()) {
+            System.out.println("[Proxy] 检测到代理配置，正在进行连通性测试...");
+            String testUrl = "https://api.bgm.tv/v0/subjects/1";
+            HttpHeaders headers = createHeaders();
+            try {
+                ResponseEntity<String> response = restTemplate.exchange(
+                        testUrl,
+                        HttpMethod.GET,
+                        new HttpEntity<>(headers),
+                        String.class
+                );
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    System.out.println("[Proxy] 代理连通性测试成功（Bangumi API 可访问）");
+                    this.hasProxy = true;
+                } else {
+                    System.out.println("[Proxy] 代理连通性测试失败: HTTP " + response.getStatusCode());
+                    this.hasProxy = false;
+                }
+            } catch (Exception e) {
+                System.out.println("[Proxy] 代理连通性测试失败: " + e.getMessage());
+                this.hasProxy = false;
+            }
+        } else {
+            System.out.println("[Proxy] 未配置代理，跳过代理连通性测试");
+            this.hasProxy = false;
         }
     }
 
@@ -122,242 +149,73 @@ public class DataImportService {
         if (hasToken && accessToken != null) {
             headers.setBearerAuth(accessToken);
         }
-        // 添加接受JSON的header
         headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
         return headers;
     }
 
     public CompletableFuture<Void> startCollect() {
-        log.info("接收到数据导入请求，准备在后台线程池执行...");
-
-        // 使用类内部已配置好的 executor 线程池来执行
+        System.out.println("[DataImport] 接收到数据导入请求，准备在后台线程池执行...");
         return CompletableFuture.runAsync(() -> {
             try {
-                // 调用核心的数据导入方法
                 this.DataImport();
             } catch (Exception e) {
-                log.error("后台数据导入过程中发生异常", e);
+                System.err.println("[DataImport] 后台数据导入过程中发生异常: " + e.getMessage());
                 throw new RuntimeException(e);
             }
         }, this.executor).whenComplete((result, ex) -> {
-            // 任务执行完成后的回调处理
             if (ex != null) {
-                log.error("!!! 数据导入任务失败: {}", ex.getMessage());
+                System.err.println("[DataImport] !!! 数据导入任务失败: " + ex.getMessage());
             } else {
-                log.info("=== 数据导入任务已全部顺利完成 ===");
+                System.out.println("[DataImport] === 数据导入任务已全部顺利完成 ===");
             }
         });
     }
 
     public void DataImport() {
-        log.info(">>> 开始执行后台数据同步任务");
+        System.out.println("[DataImport] >>> 开始执行后台数据同步任务");
 
-        // 检查令牌状态
         if (!hasToken) {
-            log.warn("当前未使用API令牌，同步速度将较慢（约18次/分钟）");
-            log.warn("建议添加API令牌以提高效率");
+            System.out.println("[DataImport] 当前未使用API令牌，同步速度将较慢（约18次/分钟）");
+            System.out.println("[DataImport] 建议添加API令牌以提高效率");
         } else {
-            log.info("使用API令牌，请求频率较高（约60次/分钟）");
+            System.out.println("[DataImport] 使用API令牌，请求频率较高（约60次/分钟）");
         }
 
         if (!hasUsername) {
-            log.error("用户名配置为空，跳过任务");
-            log.error("请在config.json中添加username字段");
+            System.err.println("[DataImport] 用户名配置为空，跳过任务");
+            System.err.println("[DataImport] 请在config.json中添加username字段");
             return;
         }
 
+        if (!hasProxy) {
+            System.err.println("[DataImport] 当前未配置代理，无法连接至Bangumi获取数据");
+            System.err.println("[DataImport] 请在config.json中配置proxy字段");
+        }
+
         try {
-            log.info("正在获取用户 [{}] 的收藏列表...", username);
+            System.out.println("[DataImport] 正在获取用户 [" + username + "] 的收藏列表...");
             List<Long> subjectIds = getUserCollectionSubjectIds(username);
             int total = subjectIds.size();
-            log.info("获取完成，共需同步 {} 个动漫条目", total);
-            if (total == 0) {
-                log.info("未找到需要同步的动漫条目");
-                return;
-            }
+            System.out.println("[DataImport] 获取完成，共需同步 " + total + " 个动画条目");
+            if (total == 0) return;
 
-            // 分批处理
-            processSubjectsInBatches(subjectIds);
+            List<Long> failedIds = processSubjectsInBatches(subjectIds);
+            System.out.println("[DataImport] 第一轮导入完成，成功 " + (total - failedIds.size()) + " 个，失败 " + failedIds.size() + " 个");
 
-            log.info("<<< 所有数据导入任务完成");
-        } catch (Exception e) {
-            log.error("导入主流程异常", e);
-        }
-    }
-
-    private void processSubjectsInBatches(List<Long> subjectIds) {
-        List<List<Long>> batches = partitionList(subjectIds, BATCH_SIZE);
-        int batchCount = batches.size();
-
-        for (int i = 0; i < batchCount; i++) {
-            log.info("处理批次 {}/{}", i + 1, batchCount);
-            List<Long> batch = batches.get(i);
-
-            List<CompletableFuture<Void>> futures = batch.stream()
-                    .map(this::processSingleSubjectWithTimeout)
-                    .collect(Collectors.toList());
-
-            try {
-                // 等待当前批次完成
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                        .get(REQUEST_TIMEOUT * batch.size(), TimeUnit.MILLISECONDS);
-                log.info("批次 {}/{} 处理完成", i + 1, batchCount);
-            } catch (TimeoutException e) {
-                log.error("批次 {} 处理超时", i + 1);
-            } catch (Exception e) {
-                log.error("批次 {} 处理异常: {}", i + 1, e.getMessage());
-            }
-
-            // 批次间间隔，避免API限制
-            if (i < batchCount - 1) {
-                try {
-                    Thread.sleep(BATCH_INTERVAL_MS);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-        }
-    }
-
-    private <T> List<List<T>> partitionList(List<T> list, int size) {
-        List<List<T>> partitions = new ArrayList<>();
-        for (int i = 0; i < list.size(); i += size) {
-            partitions.add(list.subList(i, Math.min(i + size, list.size())));
-        }
-        return partitions;
-    }
-
-    private CompletableFuture<Void> processSingleSubjectWithTimeout(Long subjectId) {
-        return CompletableFuture.runAsync(() -> processSingleSubject(subjectId), executor)
-                .orTimeout(REQUEST_TIMEOUT, TimeUnit.MILLISECONDS)
-                .exceptionally(e -> {
-                    log.error("处理Subject {} 超时或失败: {}", subjectId, e.getMessage());
-                    return null;
-                });
-    }
-
-    private void processSingleSubject(Long subjectId) {
-        long startTime = System.currentTimeMillis();
-        try {
-            log.info("开始处理 SubjectID: {}", subjectId);
-
-            // 【核心优化点】：前置数据库校验
-            if (subjectRepository.existsById(subjectId)) {
-                // 如果已存在，仅拉取主条目并更新，大幅节省网络IO和休眠时间
-                log.info("动漫 {} 已存在，仅获取主数据进行更新", subjectId);
-                self.updateExistingAnime(subjectId); // 通过 self 调用以保证事务生效
-            } else {
-                // 如果不存在，获取完整数据并插入
-                log.info("动漫 {} 不存在，准备获取完整数据", subjectId);
-                ImportDTO data = fetchSubjectDataParallel(subjectId);
-                if (data != null && data.getSubjectJson() != null) {
-                    self.importSingleAnimeData(data);
-                    log.info("SubjectID: {} 新增处理成功", subjectId);
+            if (!failedIds.isEmpty()) {
+                List<Long> finalFailed = retryFailedSubjects(failedIds, 3);
+                if (!finalFailed.isEmpty()) {
+                    System.err.println("[DataImport] 以下条目最终导入失败，共 " + finalFailed.size() + " 个：");
+                    finalFailed.forEach(id -> System.err.println("[DataImport] 失败ID: " + id));
                 } else {
-                    log.warn("SubjectID: {} 核心数据缺失，跳过", subjectId);
+                    System.out.println("[DataImport] 所有条目已成功导入！");
                 }
+            } else {
+                System.out.println("[DataImport] 所有条目一次性导入成功！");
             }
         } catch (Exception e) {
-            log.error("SubjectID: {} 处理失败: {}", subjectId, e.getMessage(), e);
-        } finally {
-            long duration = System.currentTimeMillis() - startTime;
-            log.debug("Subject {} 处理耗时: {}ms", subjectId, duration);
-        }
-    }
-
-    @Transactional
-    public void updateExistingAnime(Long subjectId) throws Exception {
-        String host = "https://api.bgm.tv/v0";
-        HttpHeaders headers = createHeaders();
-
-        // 只请求主条目数据
-        String subjectJson = fetchJsonDataWithRetry(host + "/subjects/" + subjectId, headers, MAX_RETRIES);
-        if (subjectJson == null) {
-            log.warn("更新时获取 SubjectID: {} 主数据失败", subjectId);
-            return;
-        }
-
-        JsonNode subjectNode = objectMapper.readTree(subjectJson);
-        Subject subject = subjectRepository.findById(subjectId).orElse(null);
-
-        if (subject == null) {
-            return;
-        }
-
-        // 仅执行更新评分逻辑
-        JsonNode ratingNode = subjectNode.path("rating");
-        if (!ratingNode.isMissingNode() && !ratingNode.isEmpty()) {
-            Rating rating = subject.getRating();
-            if (rating == null) {
-                rating = new Rating();
-            }
-            rating.setRank(ratingNode.path("rank").asInt());
-            rating.setTotal(ratingNode.path("total").asInt(0));
-            rating.setScore(ratingNode.path("score").asDouble(0.0));
-            // 保留原有其他属性
-            rating.setInformation(rating.getInformation() != null ? rating.getInformation() : 0.0);
-            rating.setStory(rating.getStory() != null ? rating.getStory() : 0.0);
-            rating.setCharacter(rating.getCharacter() != null ? rating.getCharacter() : 0.0);
-            rating.setQuality(rating.getQuality() != null ? rating.getQuality() : 0.0);
-            rating.setAtmosphere(rating.getAtmosphere() != null ? rating.getAtmosphere() : 0.0);
-            rating.setLove(rating.getLove() != null ? rating.getLove() : 0.0);
-            rating.setTotalscore(rating.getTotalscore() != null ? rating.getTotalscore() : 0.0);
-
-            subject.setRating(rating);
-            subjectRepository.save(subject);
-            log.info("动漫 {} 评分更新成功", subjectId);
-        }
-    }
-
-    private ImportDTO fetchSubjectDataParallel(Long subjectId) {
-        ImportDTO dto = new ImportDTO();
-        dto.setSubjectId(subjectId);
-        String host = "https://api.bgm.tv/v0";
-        HttpHeaders headers = createHeaders();
-
-        try {
-            // 1. 获取 Subject 主条目
-            String subjectJson = fetchJsonDataWithRetry(host + "/subjects/" + subjectId, headers, MAX_RETRIES);
-            dto.setSubjectJson(subjectJson);
-
-            if (subjectJson == null) {
-                log.warn("SubjectID: {} 主数据获取失败，终止后续请求", subjectId);
-                return null;
-            }
-
-            // 2. 获取 Persons (为了避免触发 API 速率限制，可以在此处微量休眠，但在单线程内休眠不会死锁)
-            smartSleep();
-            dto.setPersonJson(fetchJsonDataWithRetry(host + "/subjects/" + subjectId + "/persons", headers, MAX_RETRIES));
-
-            // 3. 获取 Characters
-            smartSleep();
-            dto.setCharacterJson(fetchJsonDataWithRetry(host + "/subjects/" + subjectId + "/characters", headers, MAX_RETRIES));
-
-            // 4. 获取 Episodes
-            smartSleep();
-            dto.setEpisodeJson(fetchJsonDataWithRetry(host + "/episodes?subject_id=" + subjectId + "&limit=100", headers, MAX_RETRIES));
-
-            // 填充默认值防止空指针
-            if (dto.getPersonJson() == null) dto.setPersonJson("[]");
-            if (dto.getCharacterJson() == null) dto.setCharacterJson("[]");
-            if (dto.getEpisodeJson() == null) dto.setEpisodeJson("{\"data\": []}");
-
-            return dto;
-
-        } catch (Exception e) {
-            log.error("SubjectID: {} 获取数据异常: {}", subjectId, e.getMessage());
-            return null;
-        }
-    }
-
-    // 辅助休眠方法
-    private void smartSleep() {
-        try {
-            // 如果有令牌，间隔短一点；无令牌间隔长一点
-            long sleepTime = hasToken ? 700 : 2000;
-            Thread.sleep(sleepTime);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            System.err.println("[DataImport] 导入主流程异常: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -372,82 +230,586 @@ public class DataImportService {
                 String url = String.format("https://api.bgm.tv/v0/users/%s/collections?limit=%d&offset=%d",
                         username, limit, offset);
 
-                log.debug("请求用户收藏URL: {}", url);
-
-                // 请求间隔控制
                 if (offset > 0) {
                     Thread.sleep(hasToken ? 1000 : 2000);
                 }
 
-                ResponseEntity<String> response = restTemplate.exchange(
-                        url,
-                        HttpMethod.GET,
-                        new HttpEntity<>(createHeaders()),
-                        String.class
-                );
+                HttpHeaders headers = createHeaders();
+                String responseBody = fetchJsonDataWithRetry(url, headers, MAX_RETRIES);
+                if (responseBody == null) {
+                    System.err.println("[DataImport] 获取用户收藏失败（重试后仍失败），offset=" + offset);
+                    break;
+                }
 
-                if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                    JsonNode root = objectMapper.readTree(response.getBody());
-                    JsonNode dataNode = root.path("data");
+                JsonNode root = objectMapper.readTree(responseBody);
+                JsonNode dataNode = root.path("data");
 
-                    if (dataNode.isArray() && !dataNode.isEmpty()) {
-                        for (JsonNode item : dataNode) {
-                            JsonNode subjectNode = item.path("subject");
-                            if (!subjectNode.isMissingNode()) {
+                if (dataNode.isArray() && !dataNode.isEmpty()) {
+                    for (JsonNode item : dataNode) {
+                        JsonNode subjectNode = item.path("subject");
+                        if (!subjectNode.isMissingNode()) {
+                            int type = subjectNode.path("type").asInt(-1);
+                            if (type == 2) {
                                 Long subjectId = subjectNode.path("id").asLong();
                                 if (subjectId != null && subjectId > 0) {
                                     subjectIds.add(subjectId);
                                 }
                             }
                         }
+                    }
 
-                        // 检查是否还有更多数据
-                        int total = root.path("total").asInt(0);
-                        offset += limit;
-                        if (offset >= total) {
-                            hasMore = false;
-                        }
-
-                        log.debug("已获取 {}/{} 个条目", Math.min(offset, total), total);
-
-                    } else {
+                    int total = root.path("total").asInt(0);
+                    offset += limit;
+                    if (offset >= total) {
                         hasMore = false;
                     }
                 } else {
-                    log.error("获取用户收藏失败: HTTP {}", response.getStatusCode());
                     hasMore = false;
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 hasMore = false;
             } catch (Exception e) {
-                log.error("获取用户收藏异常: {}", e.getMessage());
+                System.err.println("[DataImport] 获取用户收藏异常: " + e.getMessage());
                 hasMore = false;
             }
         }
 
-        log.info("共获取到 {} 个动漫条目", subjectIds.size());
+        System.out.println("[DataImport] 共获取到 " + subjectIds.size() + " 个动画条目（已过滤非动画类型）");
         return subjectIds;
+    }
+
+    private List<Long> processSubjectsInBatches(List<Long> subjectIds) {
+        List<List<Long>> batches = partitionList(subjectIds, BATCH_SIZE);
+        Set<Long> failedIds = ConcurrentHashMap.newKeySet();
+
+        for (int i = 0; i < batches.size(); i++) {
+            System.out.println("[DataImport] 处理批次 " + (i + 1) + "/" + batches.size());
+            List<Long> batch = batches.get(i);
+
+            List<CompletableFuture<Boolean>> futures = batch.stream()
+                    .map(this::processSingleSubjectWithTimeout)
+                    .collect(Collectors.toList());
+
+            try {
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                        .get(REQUEST_TIMEOUT * batch.size(), TimeUnit.MILLISECONDS);
+                System.out.println("[DataImport] 批次 " + (i + 1) + "/" + batches.size() + " 处理完成");
+            } catch (TimeoutException e) {
+                System.err.println("[DataImport] 批次 " + (i + 1) + " 处理超时");
+            } catch (Exception e) {
+                System.err.println("[DataImport] 批次 " + (i + 1) + " 处理异常: " + e.getMessage());
+            }
+
+            for (int j = 0; j < futures.size(); j++) {
+                try {
+                    Boolean success = futures.get(j).getNow(false);
+                    if (!success) {
+                        failedIds.add(batch.get(j));
+                    }
+                } catch (Exception e) {
+                    failedIds.add(batch.get(j));
+                }
+            }
+
+            if (i < batches.size() - 1) {
+                try {
+                    Thread.sleep(BATCH_INTERVAL_MS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+        return new ArrayList<>(failedIds);
+    }
+
+    private List<Long> retryFailedSubjects(List<Long> failedIds, int maxRetries) {
+        if (failedIds.isEmpty()) return Collections.emptyList();
+        Set<Long> currentFailed = new HashSet<>(failedIds);
+        Set<Long> lastFailed = new HashSet<>();
+
+        for (int retry = 1; retry <= maxRetries; retry++) {
+            if (currentFailed.isEmpty()) break;
+            System.out.println("[DataImport] 第 " + retry + " 次重试，共 " + currentFailed.size() + " 个失败条目");
+
+            List<Long> retryList = new ArrayList<>(currentFailed);
+            List<Long> newFailed = processSubjectsInBatches(retryList);
+
+            lastFailed.clear();
+            lastFailed.addAll(currentFailed);
+            currentFailed.clear();
+            currentFailed.addAll(newFailed);
+
+            if (currentFailed.isEmpty()) {
+                System.out.println("[DataImport] 所有条目已成功导入！");
+                break;
+            }
+            if (currentFailed.size() == lastFailed.size()) {
+                System.out.println("[DataImport] 重试后失败条目数不再减少（" + currentFailed.size() + "），停止重试");
+                break;
+            }
+        }
+        return new ArrayList<>(currentFailed);
+    }
+
+    private CompletableFuture<Boolean> processSingleSubjectWithTimeout(Long subjectId) {
+        long timeout = hasToken ? REQUEST_TIMEOUT : REQUEST_TIMEOUT * 3;
+        return CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return processSingleSubject(subjectId);
+                    } catch (Exception e) {
+                        System.err.println("[DataImport] 处理Subject " + subjectId + " 发生异常: " + e.getMessage());
+                        return false;
+                    }
+                }, executor).orTimeout(timeout, TimeUnit.MILLISECONDS)
+                .exceptionally(e -> {
+                    System.err.println("[DataImport] 处理Subject " + subjectId + " 超时或失败: " + e.getMessage());
+                    return false;
+                });
+    }
+
+    private boolean processSingleSubject(Long subjectId) {
+        long startTime = System.currentTimeMillis();
+        try {
+            System.out.println("[DataImport] 开始处理 SubjectID: " + subjectId);
+
+            if (subjectRepository.existsById(subjectId)) {
+                System.out.println("[DataImport] 动漫 " + subjectId + " 已存在，仅获取主数据进行更新");
+                self.updateExistingAnime(subjectId);
+            } else {
+                System.out.println("[DataImport] 动漫 " + subjectId + " 不存在，准备获取完整数据");
+                ImportDTO data = fetchSubjectDataParallel(subjectId);
+                if (data != null && data.getSubjectJson() != null) {
+                    self.importSingleAnimeData(data);
+                    System.out.println("[DataImport] SubjectID: " + subjectId + " 新增处理成功");
+                } else {
+                    System.out.println("[DataImport] SubjectID: " + subjectId + " 核心数据缺失，跳过");
+                    return false;
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            System.err.println("[DataImport] SubjectID: " + subjectId + " 处理失败: " + e.getMessage());
+            return false;
+        } finally {
+            long duration = System.currentTimeMillis() - startTime;
+        }
+    }
+
+    public void updateExistingAnime(Long subjectId) throws Exception {
+        Subject subject = subjectRepository.findById(subjectId).orElse(null);
+        if (subject == null) return;
+
+        if (isRecentSubject(subject.getDate())) {
+            System.out.println("[DataImport] 动漫 " + subjectId + " 放送时间在近一年内，执行全量更新");
+            self.fullyUpdateAnime(subjectId);
+        } else {
+            System.out.println("[DataImport] 动漫 " + subjectId + " 放送时间超过一年，仅更新评分");
+            self.updateRatingOnly(subjectId);
+        }
+    }
+
+    private boolean isRecentSubject(String date) {
+        if (date == null || date.trim().isEmpty()) {
+            return true;
+        }
+        LocalDate parsed = parseSubjectDate(date.trim());
+        if (parsed == null) {
+            return true;
+        }
+        LocalDate threshold = LocalDate.now().minusYears(1);
+        return !parsed.isBefore(threshold);
+    }
+
+    private LocalDate parseSubjectDate(String date) {
+        String cleaned = date.trim();
+        try {
+            if (cleaned.length() == 4) {
+                return LocalDate.of(Integer.parseInt(cleaned), 1, 1);
+            }
+            if (cleaned.length() == 7) {
+                YearMonth ym = YearMonth.parse(cleaned);
+                return ym.atDay(1);
+            }
+            return LocalDate.parse(cleaned);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @Transactional
+    public void updateRatingOnly(Long subjectId) throws Exception {
+        String host = "https://api.bgm.tv/v0";
+        HttpHeaders headers = createHeaders();
+
+        String subjectJson = fetchJsonDataWithRetry(host + "/subjects/" + subjectId, headers, MAX_RETRIES);
+        if (subjectJson == null) {
+            System.out.println("[DataImport] 更新时获取 SubjectID: " + subjectId + " 主数据失败");
+            return;
+        }
+
+        JsonNode subjectNode = objectMapper.readTree(subjectJson);
+        Subject subject = subjectRepository.findById(subjectId).orElse(null);
+        if (subject == null) return;
+
+        JsonNode ratingNode = subjectNode.path("rating");
+        if (!ratingNode.isMissingNode() && !ratingNode.isEmpty()) {
+            Rating rating = subject.getRating();
+            if (rating == null) rating = new Rating();
+            rating.setRank(ratingNode.path("rank").asInt());
+            rating.setTotal(ratingNode.path("total").asInt(0));
+            rating.setScore(ratingNode.path("score").asDouble(0.0));
+            rating.setInformation(rating.getInformation() != null ? rating.getInformation() : 0.0);
+            rating.setStory(rating.getStory() != null ? rating.getStory() : 0.0);
+            rating.setCharacter(rating.getCharacter() != null ? rating.getCharacter() : 0.0);
+            rating.setQuality(rating.getQuality() != null ? rating.getQuality() : 0.0);
+            rating.setAtmosphere(rating.getAtmosphere() != null ? rating.getAtmosphere() : 0.0);
+            rating.setLove(rating.getLove() != null ? rating.getLove() : 0.0);
+            rating.setTotalscore(rating.getTotalscore() != null ? rating.getTotalscore() : 0.0);
+            subject.setRating(rating);
+            subjectRepository.save(subject);
+            System.out.println("[DataImport] 动漫 " + subjectId + " 评分更新成功");
+        }
+    }
+
+    @Transactional
+    public void fullyUpdateAnime(Long subjectId) throws Exception {
+        ImportDTO data = fetchSubjectDataParallel(subjectId);
+        if (data == null || data.getSubjectJson() == null) {
+            System.out.println("[DataImport] 全量更新 SubjectID: " + subjectId + " 获取数据失败，跳过");
+            return;
+        }
+
+        JsonNode subjectNode = objectMapper.readTree(data.getSubjectJson());
+        Subject subject = subjectRepository.findById(subjectId).orElse(null);
+        if (subject == null) return;
+
+        // 1. 同步 Person
+        Map<Long, Person> personMap = new HashMap<>();
+        List<Person> allPersons = new ArrayList<>();
+        List<Person> newPersons = new ArrayList<>();
+        JsonNode personArray = objectMapper.readTree(data.getPersonJson());
+
+        Map<Long, Person> existingPersons = new HashMap<>();
+        if (personArray.isArray() && !personArray.isEmpty()) {
+            List<Long> personIds = new ArrayList<>();
+            for (JsonNode personNode : personArray) {
+                long id = personNode.path("id").asLong();
+                if (id > 0) personIds.add(id);
+            }
+            for (Person p : personRepository.findAllById(personIds)) {
+                existingPersons.put(p.getId(), p);
+            }
+        }
+
+        if (personArray.isArray()) {
+            for (JsonNode personNode : personArray) {
+                long id = personNode.path("id").asLong();
+                if (id <= 0 || personMap.containsKey(id)) continue;
+                Person person = existingPersons.get(id);
+                if (person == null) {
+                    person = parseSinglePerson(personNode);
+                    newPersons.add(person);
+                } else {
+                    applyPersonFields(person, personNode);
+                }
+                personMap.put(id, person);
+                allPersons.add(person);
+            }
+        }
+
+        if (!newPersons.isEmpty()) {
+            newPersons.sort(Comparator.comparing(Person::getId));
+            batchMergePersons(newPersons);
+        }
+
+        // 2. 同步 Character
+        Map<Long, Character> characterMap = new HashMap<>();
+        List<Character> allCharacters = new ArrayList<>();
+        List<Character> newCharacters = new ArrayList<>();
+        JsonNode characterArray = objectMapper.readTree(data.getCharacterJson());
+
+        Map<Long, Character> existingCharacters = new HashMap<>();
+        if (characterArray.isArray() && !characterArray.isEmpty()) {
+            List<Long> characterIds = new ArrayList<>();
+            for (JsonNode characterNode : characterArray) {
+                long id = characterNode.path("id").asLong();
+                if (id > 0) characterIds.add(id);
+            }
+            for (Character c : characterRepository.findAllById(characterIds)) {
+                existingCharacters.put(c.getId(), c);
+            }
+        }
+
+        if (characterArray.isArray()) {
+            for (JsonNode characterNode : characterArray) {
+                long id = characterNode.path("id").asLong();
+                if (id <= 0 || characterMap.containsKey(id)) continue;
+                Character character = existingCharacters.get(id);
+                if (character == null) {
+                    character = new Character();
+                    character.setId(id);
+                    character.setAttitude(0);
+                    applyCharacterFields(character, characterNode);
+                    newCharacters.add(character);
+                } else {
+                    applyCharacterFields(character, characterNode);
+                }
+
+                JsonNode actorsNode = characterNode.path("actors");
+                if (actorsNode.isArray()) {
+                    List<Person> casts = new ArrayList<>();
+                    for (JsonNode actorNode : actorsNode) {
+                        long actorId = actorNode.path("id").asLong();
+                        Person person = personMap.get(actorId);
+                        if (person == null) {
+                            person = existingPersons.get(actorId);
+                        }
+                        if (person == null) {
+                            person = personRepository.findById(actorId).orElse(null);
+                        }
+                        if (person == null) {
+                            person = parseSinglePerson(actorNode);
+                            personRepository.save(person);
+                        }
+                        personMap.put(actorId, person);
+                        casts.add(person);
+                    }
+                    character.setCasts(casts);
+                }
+
+                characterMap.put(id, character);
+                allCharacters.add(character);
+            }
+        }
+
+        if (!newCharacters.isEmpty()) {
+            batchMergeCharacters(newCharacters);
+        }
+
+        // 3. 更新 Subject 主字段
+        applySubjectFields(subject, subjectNode);
+
+        // 4. 重建 Episodes
+        rebuildEpisodes(data.getEpisodeJson(), subject);
+
+        // 5. 重建 Infobox
+        rebuildInfoboxes(subjectNode.path("infobox"), subject);
+
+        // 6. 同步关联集合
+        subject.getCharacters().clear();
+        subject.getCharacters().addAll(allCharacters);
+        subject.getPersons().clear();
+        subject.getPersons().addAll(allPersons);
+        subjectRepository.save(subject);
+
+        System.out.println("[DataImport] 动漫 " + subjectId + " 全量更新成功");
+    }
+
+    private void applySubjectFields(Subject subject, JsonNode subjectNode) {
+        subject.setName(subjectNode.path("name").asText());
+        subject.setNameCn(subjectNode.path("name_cn").asText());
+        subject.setDate(subjectNode.path("date").asText());
+        subject.setPlatform(subjectNode.path("platform").asText());
+        subject.setSummary(subjectNode.path("summary").asText());
+        subject.setEps(subjectNode.path("eps").asInt(subject.getEps() != null ? subject.getEps() : 0));
+        subject.setVolumes(subjectNode.path("volumes").asInt(subject.getVolumes() != null ? subject.getVolumes() : 0));
+        subject.setSeries(subjectNode.path("series").asBoolean(false));
+        subject.setLocked(subjectNode.path("locked").asBoolean(false));
+        subject.setNsfw(subjectNode.path("nsfw").asBoolean(false));
+        subject.setType(subjectNode.path("type").asInt(subject.getType() != null ? subject.getType() : 0));
+
+        JsonNode imagesNode = subjectNode.path("images");
+        if (!imagesNode.isMissingNode() && !imagesNode.isEmpty()) {
+            Images images = subject.getImages();
+            if (images == null) images = new Images();
+            images.setSmall(imagesNode.path("small").asText());
+            images.setGrid(imagesNode.path("grid").asText());
+            images.setLarge(imagesNode.path("large").asText());
+            images.setMedium(imagesNode.path("medium").asText());
+            images.setCommon(imagesNode.path("common").asText());
+            subject.setImages(images);
+        }
+
+        JsonNode ratingNode = subjectNode.path("rating");
+        if (!ratingNode.isMissingNode() && !ratingNode.isEmpty()) {
+            Rating rating = subject.getRating();
+            if (rating == null) rating = new Rating();
+            rating.setRank(ratingNode.path("rank").asInt());
+            rating.setTotal(ratingNode.path("total").asInt(0));
+            rating.setScore(ratingNode.path("score").asDouble(rating.getScore() != null ? rating.getScore() : 0.0));
+            rating.setInformation(rating.getInformation() != null ? rating.getInformation() : 0.0);
+            rating.setStory(rating.getStory() != null ? rating.getStory() : 0.0);
+            rating.setCharacter(rating.getCharacter() != null ? rating.getCharacter() : 0.0);
+            rating.setQuality(rating.getQuality() != null ? rating.getQuality() : 0.0);
+            rating.setAtmosphere(rating.getAtmosphere() != null ? rating.getAtmosphere() : 0.0);
+            rating.setLove(rating.getLove() != null ? rating.getLove() : 0.0);
+            rating.setTotalscore(rating.getTotalscore() != null ? rating.getTotalscore() : 0.0);
+            subject.setRating(rating);
+        }
+    }
+
+    private void applyPersonFields(Person person, JsonNode personNode) {
+        person.setName(personNode.path("name").asText());
+        person.setShortSummary(personNode.path("short_summary").asText());
+        person.setType(personNode.path("type").asInt(person.getType() != null ? person.getType() : 0));
+        person.setLocked(personNode.path("locked").asBoolean(false));
+
+        JsonNode imagesNode = personNode.path("images");
+        if (!imagesNode.isMissingNode() && !imagesNode.isEmpty()) {
+            Images images = person.getImages();
+            if (images == null) images = new Images();
+            images.setSmall(imagesNode.path("small").asText());
+            images.setGrid(imagesNode.path("grid").asText());
+            images.setLarge(imagesNode.path("large").asText());
+            images.setMedium(imagesNode.path("medium").asText());
+            person.setImages(images);
+        }
+
+        JsonNode careersNode = personNode.path("career");
+        if (careersNode.isArray()) {
+            List<String> careers = new ArrayList<>();
+            for (JsonNode careerNode : careersNode) {
+                careers.add(careerNode.asText());
+            }
+            person.setCareers(careers);
+        }
+    }
+
+    private void applyCharacterFields(Character character, JsonNode characterNode) {
+        character.setName(characterNode.path("name").asText());
+        character.setSummary(characterNode.path("summary").asText());
+        character.setRelation(characterNode.path("relation").asText());
+        character.setType(characterNode.path("type").asInt(character.getType() != null ? character.getType() : 0));
+
+        JsonNode imagesNode = characterNode.path("images");
+        if (!imagesNode.isMissingNode() && !imagesNode.isEmpty()) {
+            Images images = character.getImages();
+            if (images == null) images = new Images();
+            images.setSmall(imagesNode.path("small").asText());
+            images.setGrid(imagesNode.path("grid").asText());
+            images.setLarge(imagesNode.path("large").asText());
+            images.setMedium(imagesNode.path("medium").asText());
+            character.setImages(images);
+        }
+    }
+
+    private void rebuildEpisodes(String episodeJson, Subject subject) throws Exception {
+        Map<Long, Integer> oldAttitude = new HashMap<>();
+        List<Episode> oldEpisodes = episodeRepository.findBySubject(subject);
+        for (Episode ep : oldEpisodes) {
+            oldAttitude.put(ep.getId(), ep.getAttitude() != null ? ep.getAttitude() : 0);
+        }
+
+        if (!oldEpisodes.isEmpty()) {
+            episodeRepository.deleteAll(oldEpisodes);
+            episodeRepository.flush();
+        }
+
+        JsonNode episodesNode = objectMapper.readTree(episodeJson).path("data");
+        if (episodesNode.isArray() && !episodesNode.isEmpty()) {
+            List<Episode> episodes = new ArrayList<>();
+            for (JsonNode episodeNode : episodesNode) {
+                Episode episode = new Episode();
+                episode.setId(episodeNode.path("id").asLong());
+                episode.setEp(episodeNode.path("ep").asInt());
+                episode.setName(episodeNode.path("name").asText());
+                episode.setNameCn(episodeNode.path("name_cn").asText());
+                episode.setDuration(episodeNode.path("duration").asText());
+                episode.setDescription(episodeNode.path("desc").asText());
+                episode.setAirdate(episodeNode.path("airdate").asText());
+                episode.setAttitude(oldAttitude.getOrDefault(episode.getId(), 0));
+                episode.setSubject(subject);
+                episodes.add(episode);
+            }
+            episodeRepository.saveAll(episodes);
+        }
+    }
+
+    private void rebuildInfoboxes(JsonNode infoboxNode, Subject subject) {
+        List<Infobox> oldInfoboxes = infoboxRepository.findBySubject(subject);
+        if (!oldInfoboxes.isEmpty()) {
+            infoboxRepository.deleteAll(oldInfoboxes);
+            infoboxRepository.flush();
+        }
+
+        if (infoboxNode.isArray() && !infoboxNode.isEmpty()) {
+            List<Infobox> infoboxes = new ArrayList<>();
+            for (JsonNode infoboxItem : infoboxNode) {
+                Infobox infobox = new Infobox();
+                infobox.setKey(infoboxItem.path("key").asText());
+                infobox.setValue(infoboxItem.path("value").asText());
+                infobox.setSubject(subject);
+                infoboxes.add(infobox);
+            }
+            infoboxRepository.saveAll(infoboxes);
+        }
+    }
+
+    private ImportDTO fetchSubjectDataParallel(Long subjectId) {
+        ImportDTO dto = new ImportDTO();
+        dto.setSubjectId(subjectId);
+        String host = "https://api.bgm.tv/v0";
+        HttpHeaders headers = createHeaders();
+
+        try {
+            String subjectJson = fetchJsonDataWithRetry(host + "/subjects/" + subjectId, headers, MAX_RETRIES);
+            dto.setSubjectJson(subjectJson);
+            if (subjectJson == null) {
+                System.out.println("[DataImport] SubjectID: " + subjectId + " 主数据获取失败，终止后续请求");
+                return null;
+            }
+
+            smartSleep();
+
+            CompletableFuture<String> personFuture = CompletableFuture.supplyAsync(
+                    () -> fetchJsonDataWithRetry(host + "/subjects/" + subjectId + "/persons", headers, MAX_RETRIES),
+                    executor);
+            CompletableFuture<String> characterFuture = CompletableFuture.supplyAsync(
+                    () -> fetchJsonDataWithRetry(host + "/subjects/" + subjectId + "/characters", headers, MAX_RETRIES),
+                    executor);
+            CompletableFuture<String> episodeFuture = CompletableFuture.supplyAsync(
+                    () -> fetchJsonDataWithRetry(host + "/episodes?subject_id=" + subjectId + "&limit=100", headers, MAX_RETRIES),
+                    executor);
+
+            dto.setPersonJson(personFuture.join());
+            dto.setCharacterJson(characterFuture.join());
+            dto.setEpisodeJson(episodeFuture.join());
+
+            if (dto.getPersonJson() == null) dto.setPersonJson("[]");
+            if (dto.getCharacterJson() == null) dto.setCharacterJson("[]");
+            if (dto.getEpisodeJson() == null) dto.setEpisodeJson("{\"data\": []}");
+
+            return dto;
+        } catch (Exception e) {
+            System.err.println("[DataImport] SubjectID: " + subjectId + " 获取数据异常: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private void smartSleep() {
+        try {
+            long sleepTime = hasToken ? 700 : 2000;
+            Thread.sleep(sleepTime);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private String fetchJsonData(String url, HttpHeaders headers) {
         try {
-            log.debug("请求数据: {}", url);
-
             ResponseEntity<String> response = restTemplate.exchange(
                     url,
                     HttpMethod.GET,
                     new HttpEntity<>(headers),
                     String.class
             );
-
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 return response.getBody();
             } else {
-                log.error("请求失败 {}: HTTP {}", url, response.getStatusCode());
-                // 如果是429 Too Many Requests，等待更长时间
+                System.err.println("[DataImport] 请求失败 " + url + ": HTTP " + response.getStatusCode());
                 if (response.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
-                    log.warn("API请求过多，等待10秒后重试");
+                    System.out.println("[DataImport] API请求过多，等待10秒后重试");
                     try {
                         Thread.sleep(10000);
                     } catch (InterruptedException e) {
@@ -457,7 +819,7 @@ public class DataImportService {
                 return null;
             }
         } catch (Exception e) {
-            log.error("请求失败 {}: {}", url, e.getMessage());
+            System.err.println("[DataImport] 请求失败 " + url + ": " + e.getMessage());
             return null;
         }
     }
@@ -467,24 +829,17 @@ public class DataImportService {
         while (attempt < maxAttempts) {
             try {
                 if (Thread.currentThread().isInterrupted()) return null;
-
                 String result = fetchJsonData(url, headers);
-                if (result != null) {
-                    return result;
-                }
+                if (result != null) return result;
             } catch (Exception e) {
                 attempt++;
-                log.warn("请求失败 (第 {}/{} 次): {}", attempt, maxAttempts, url);
-
+                System.out.println("[DataImport] 请求失败 (第 " + attempt + "/" + maxAttempts + " 次): " + url);
                 if (attempt >= maxAttempts) {
-                    log.error("请求 {} 重试{}次后失败", url, maxAttempts);
+                    System.err.println("[DataImport] 请求 " + url + " 重试" + maxAttempts + "次后失败");
                     return null;
                 }
-
-                // 指数退避
                 try {
-                    long sleepTime = 1000L * (1L << (attempt - 1)); // 1, 2, 4秒...
-                    log.debug("等待 {} 毫秒后重试", sleepTime);
+                    long sleepTime = 1000L * (1L << (attempt - 1));
                     Thread.sleep(sleepTime);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
@@ -497,71 +852,57 @@ public class DataImportService {
 
     @Transactional
     public void importBatchData(List<ImportDTO> requests) {
-        log.info("开始导入动漫数据，共 {} 个条目", requests.size());
-        int successCount = 0;
-        int errorCount = 0;
-
+        System.out.println("[DataImport] 开始导入动漫数据，共 " + requests.size() + " 个条目");
+        int successCount = 0, errorCount = 0;
         for (ImportDTO request : requests) {
             try {
                 importSingleAnimeData(request);
                 successCount++;
-                log.info("成功导入动漫: {}", request.getSubjectId());
+                System.out.println("[DataImport] 成功导入动漫: " + request.getSubjectId());
             } catch (Exception e) {
                 errorCount++;
-                log.warn("导入失败 (ID: {}): {}", request.getSubjectId(), e.getMessage());
+                System.out.println("[DataImport] 导入失败 (ID: " + request.getSubjectId() + "): " + e.getMessage());
             }
         }
-        log.info("导入完成！成功: {}, 失败: {}", successCount, errorCount);
+        System.out.println("[DataImport] 导入完成！成功: " + successCount + ", 失败: " + errorCount);
     }
 
     @Transactional
     public void importSingleAnimeData(ImportDTO tar) throws Exception {
         long subjectId = tar.getSubjectId();
         JsonNode subjectNode = objectMapper.readTree(tar.getSubjectJson());
+        System.out.println("[DataImport] 开始导入新动漫ID: " + subjectId);
 
-        log.info("开始导入新动漫ID: {}", subjectId);
         Map<Long, Person> personMap = new HashMap<>();
         List<Person> newPersons = new ArrayList<>();
-        // 1. 解析制作人员（/persons）
         JsonNode personArray = objectMapper.readTree(tar.getPersonJson());
         parsePersons(personArray, personMap, newPersons);
 
-        // 新增：character 缓存和待新增列表
         Map<Long, Character> characterMap = new HashMap<>();
         List<Character> newCharacters = new ArrayList<>();
-
-        // 2. 解析角色及其声优（/characters）
         JsonNode characterArray = objectMapper.readTree(tar.getCharacterJson());
         parseCharacters(characterArray, personMap, newPersons, characterMap, newCharacters);
 
-        // 3. 使用 MERGE 原子化保存所有新增人员
         if (!newPersons.isEmpty()) {
             newPersons.sort(Comparator.comparing(Person::getId));
             batchMergePersons(newPersons);
-            log.info("合并了 {} 个Person", newPersons.size());
+            System.out.println("[DataImport] 合并了 " + newPersons.size() + " 个Person");
         }
 
-        // 4. 保存新增角色
         if (!newCharacters.isEmpty()) {
-            characterRepository.saveAll(newCharacters);
-            log.info("保存了 {} 个新Character", newCharacters.size());
+            batchMergeCharacters(newCharacters);
+            System.out.println("[DataImport] 保存了 " + newCharacters.size() + " 个新Character");
         }
 
-        // 5. 解析并保存主条目（传入全部角色列表和全部人员列表）
         List<Character> allCharacters = new ArrayList<>(characterMap.values());
         Subject subject = parseSubject(subjectNode, allCharacters, new ArrayList<>(personMap.values()));
 
-        // 6. 保存剧集和Infobox
         JsonNode episodeData = objectMapper.readTree(tar.getEpisodeJson());
         saveEpisodes(episodeData.path("data"), subject);
         saveInfoboxes(subjectNode.path("infobox"), subject);
-        log.info("完成导入新动漫ID: {}", subjectId);
+        System.out.println("[DataImport] 完成导入新动漫ID: " + subjectId);
     }
 
-    /**
-     * 使用 H2 的 MERGE 语句批量插入或忽略人员，并同步更新 careers 表。
-     * 此操作是原子的，可彻底避免并发插入时的主键冲突。
-     */
     private void batchMergePersons(List<Person> persons) {
         String sql = "MERGE INTO persons (person_id, name, short_summary, person_type, locked, " +
                 "small_image_url, grid_image_url, large_image_url, medium_image_url, common_image_url) " +
@@ -588,7 +929,6 @@ public class DataImportService {
             }
         });
 
-        // 处理 careers (person_careers 表)
         String deleteCareersSql = "DELETE FROM person_careers WHERE person_id = ?";
         String insertCareersSql = "INSERT INTO person_careers (person_id, career) VALUES (?, ?)";
         for (Person p : persons) {
@@ -604,12 +944,9 @@ public class DataImportService {
         }
     }
 
-    /**
-     * 使用 H2 的 MERGE 语句批量插入或忽略角色，并同步更新 casts 关联表。
-     * 若后续出现角色主键冲突，可调用此方法替换 characterRepository.saveAll()。
-     */
     private void batchMergeCharacters(List<Character> characters) {
-        String sql = "MERGE INTO characters (character_id, name, summary, relation, type, attitude, " +
+        if (characters.isEmpty()) return;
+        String sql = "MERGE INTO characters (character_id, name, summary, relation, character_type, attitude, " +
                 "small_image_url, grid_image_url, large_image_url, medium_image_url, common_image_url) " +
                 "KEY(character_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
@@ -621,7 +958,7 @@ public class DataImportService {
                 ps.setString(2, c.getName());
                 ps.setString(3, c.getSummary());
                 ps.setString(4, c.getRelation());
-                ps.setInt(5, c.getType());
+                ps.setInt(5, c.getType());      // 对应 character_type 列
                 ps.setInt(6, c.getAttitude());
                 ps.setString(7, images != null ? images.getSmall() : null);
                 ps.setString(8, images != null ? images.getGrid() : null);
@@ -635,7 +972,7 @@ public class DataImportService {
             }
         });
 
-        // 处理 casts (character_cast 表)
+        // 处理 casts 关联表（表名和列名与实体映射一致）
         String deleteCastsSql = "DELETE FROM character_cast WHERE character_id = ?";
         String insertCastsSql = "INSERT INTO character_cast (character_id, person_id) VALUES (?, ?)";
         for (Character c : characters) {
@@ -655,16 +992,14 @@ public class DataImportService {
         if (personsNode.isArray()) {
             for (JsonNode personNode : personsNode) {
                 long id = personNode.path("id").asLong();
-                if (personMap.containsKey(id)) continue; // 已缓存，跳过
-
-                // 查询数据库
+                if (personMap.containsKey(id)) continue;
                 Optional<Person> existing = personRepository.findById(id);
                 if (existing.isPresent()) {
-                    personMap.put(id, existing.get()); // 使用托管实体
+                    personMap.put(id, existing.get());
                 } else {
                     Person person = parseSinglePerson(personNode);
                     personMap.put(id, person);
-                    newPersons.add(person); // 待新增
+                    newPersons.add(person);
                 }
             }
         }
@@ -677,7 +1012,6 @@ public class DataImportService {
         person.setShortSummary(personNode.path("short_summary").asText());
         person.setType(personNode.path("type").asInt(0));
         person.setLocked(personNode.path("locked").asBoolean(false));
-
         JsonNode imagesNode = personNode.path("images");
         if (!imagesNode.isMissingNode() && !imagesNode.isEmpty()) {
             Images images = new Images();
@@ -687,7 +1021,6 @@ public class DataImportService {
             images.setMedium(imagesNode.path("medium").asText());
             person.setImages(images);
         }
-
         JsonNode careersNode = personNode.path("career");
         if (careersNode.isArray() && !careersNode.isEmpty()) {
             List<String> careers = new ArrayList<>();
@@ -696,7 +1029,6 @@ public class DataImportService {
             }
             person.setCareers(careers);
         }
-
         return person;
     }
 
@@ -704,7 +1036,6 @@ public class DataImportService {
     public void savePersonsSafe(List<Person> persons) {
         List<Person> toSave = new ArrayList<>();
         for (Person p : persons) {
-            // 在锁和独立事务内部再次检查
             if (!personRepository.existsById(p.getId())) {
                 toSave.add(p);
             }
@@ -719,16 +1050,11 @@ public class DataImportService {
         if (charactersNode.isArray()) {
             for (JsonNode characterNode : charactersNode) {
                 long id = characterNode.path("id").asLong();
-                // 如果已经缓存，跳过
                 if (characterMap.containsKey(id)) continue;
-
                 Character character;
-                // 查询数据库是否已存在
                 Optional<Character> existing = characterRepository.findById(id);
                 if (existing.isPresent()) {
-                    character = existing.get(); // 使用托管实体
-                    // 注意：如果需要对已存在的角色更新某些字段（如 relation, type, summary），可以在这里更新
-                    // 但目前 API 返回的角色信息可能不会变化，所以可以忽略更新，保持已有数据
+                    character = existing.get();
                 } else {
                     character = new Character();
                     character.setId(id);
@@ -736,9 +1062,7 @@ public class DataImportService {
                     character.setSummary(characterNode.path("summary").asText());
                     character.setRelation(characterNode.path("relation").asText());
                     character.setType(characterNode.path("type").asInt(0));
-                    character.setAttitude(0); // 默认态度
-
-                    // 设置图片
+                    character.setAttitude(0);
                     JsonNode imagesNode = characterNode.path("images");
                     if (!imagesNode.isMissingNode() && !imagesNode.isEmpty()) {
                         Images images = new Images();
@@ -750,8 +1074,6 @@ public class DataImportService {
                     }
                     newCharacters.add(character);
                 }
-
-                // 处理声优（actors）- 需要设置到 character 中，无论是新角色还是已存在角色，都要更新声优列表
                 JsonNode actorsNode = characterNode.path("actors");
                 if (actorsNode.isArray()) {
                     List<Person> casts = new ArrayList<>();
@@ -759,7 +1081,6 @@ public class DataImportService {
                         long actorId = actorNode.path("id").asLong();
                         Person person = personMap.get(actorId);
                         if (person == null) {
-                            // 缓存未命中，查询数据库
                             Optional<Person> existingPerson = personRepository.findById(actorId);
                             if (existingPerson.isPresent()) {
                                 person = existingPerson.get();
@@ -774,7 +1095,6 @@ public class DataImportService {
                     }
                     character.setCasts(casts);
                 }
-
                 characterMap.put(id, character);
             }
         }
@@ -799,7 +1119,6 @@ public class DataImportService {
         subject.setName(subjectNode.path("name").asText());
         subject.setNameCn(subjectNode.path("name_cn").asText());
         subject.setDate(subjectNode.path("date").asText());
-
         subject.setPlatform(subjectNode.path("platform").asText());
         subject.setSummary(subjectNode.path("summary").asText());
         subject.setEps(subjectNode.path("eps").asInt(0));
@@ -808,7 +1127,6 @@ public class DataImportService {
         subject.setLocked(subjectNode.path("locked").asBoolean(false));
         subject.setNsfw(subjectNode.path("nsfw").asBoolean(false));
         subject.setType(subjectNode.path("type").asInt(0));
-
         JsonNode imagesNode = subjectNode.path("images");
         if (!imagesNode.isMissingNode() && !imagesNode.isEmpty()) {
             Images images = new Images();
@@ -819,7 +1137,6 @@ public class DataImportService {
             images.setCommon(imagesNode.path("common").asText());
             subject.setImages(images);
         }
-
         JsonNode ratingNode = subjectNode.path("rating");
         if (!ratingNode.isMissingNode() && !ratingNode.isEmpty()) {
             Rating rating = new Rating();
@@ -835,10 +1152,8 @@ public class DataImportService {
             rating.setTotalscore(0.0);
             subject.setRating(rating);
         }
-
         subject.setCharacters(characters);
         subject.setPersons(persons);
-
         return subjectRepository.save(subject);
     }
 
@@ -860,8 +1175,6 @@ public class DataImportService {
                     episodes.add(episode);
                 }
             }
-
-            // 批量保存
             if (!episodes.isEmpty()) {
                 episodeRepository.saveAll(episodes);
             }
@@ -879,17 +1192,23 @@ public class DataImportService {
                 infobox.setSubject(subject);
                 infoboxes.add(infobox);
             }
-
-            // 批量保存
             if (!infoboxes.isEmpty()) {
                 infoboxRepository.saveAll(infoboxes);
             }
         }
     }
 
+    private <T> List<List<T>> partitionList(List<T> list, int size) {
+        List<List<T>> partitions = new ArrayList<>();
+        for (int i = 0; i < list.size(); i += size) {
+            partitions.add(list.subList(i, Math.min(i + size, list.size())));
+        }
+        return partitions;
+    }
+
     @PreDestroy
     public void shutdown() {
-        log.info("关闭 DataImportService 线程池...");
+        System.out.println("[DataImport] 关闭线程池...");
         if (executor != null && !executor.isShutdown()) {
             executor.shutdown();
             try {

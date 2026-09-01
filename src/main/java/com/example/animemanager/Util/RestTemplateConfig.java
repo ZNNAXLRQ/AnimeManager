@@ -8,6 +8,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.net.InetSocketAddress;
 import java.net.Proxy;
+import java.net.URL;
 
 @Configuration
 public class RestTemplateConfig {
@@ -21,21 +22,21 @@ public class RestTemplateConfig {
         String proxyConfig = JsonConfigUtil.readProxy("Data/config.json");
         if (proxyConfig != null && !proxyConfig.trim().isEmpty()) {
             try {
-                java.net.URL proxyUrl = new java.net.URL(proxyConfig);
+                URL proxyUrl = new URL(proxyConfig);
                 String host = proxyUrl.getHost();
                 int port = proxyUrl.getPort();
                 if (port == -1) {
-                    port = 7890; // 常见代理端口，可根据需要调整
-                    System.out.println("代理未指定端口，使用默认端口 7890");
+                    port = 7890;
+                    System.out.println("[Proxy]      代理未指定端口，使用默认端口 7890");
                 }
                 Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port));
                 factory.setProxy(proxy);
-                System.out.println("RestTemplate 代理已配置：" + host + ":" + port);
+                System.out.println("[Proxy]      RestTemplate 代理已配置：" + host + ":" + port);
             } catch (Exception e) {
-                System.err.println("代理配置解析失败，将使用直连模式：" + e.getMessage());
+                System.err.println("[Proxy]      代理配置解析失败，将使用直连模式：" + e.getMessage());
             }
         } else {
-            System.out.println("未配置代理，使用直连模式");
+            System.out.println("[Proxy]      未配置代理，使用直连模式");
         }
 
         return new RestTemplate(factory);

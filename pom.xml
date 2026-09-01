@@ -177,6 +177,7 @@
                                     <includes>
                                         <include>Data/config.json</include>
                                         <include>Data/icon.png</include>
+                                        <include>Data/placeholder.png</include>
                                     </includes>
                                 </resource>
                             </resources>
@@ -198,7 +199,7 @@
                         <configuration>
                             <type>APP_IMAGE</type>
                             <name>あにめManager</name>
-                            <appVersion>1.0.0</appVersion>
+                            <appVersion>1.5.0</appVersion>
                             <input>${project.build.directory}/app-input</input>
                             <mainJar>${project.build.finalName}.jar</mainJar>
                             <destination>${project.build.directory}/jpackage</destination>

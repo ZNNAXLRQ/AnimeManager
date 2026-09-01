@@ -34,7 +34,7 @@ public class ScoreCalculatorService {
         try {
             weights = JsonConfigUtil.readAnimeWeights("Data/config.json");
         } catch (Exception e) {
-            System.err.println("读取权重配置文件失败，使用默认权重: " + e.getMessage());
+            System.err.println("[Score]      读取权重配置文件失败，使用默认权重: " + e.getMessage());
             weights = new HashMap<>();
         }
         if (weights == null || weights.isEmpty()) {
@@ -46,7 +46,7 @@ public class ScoreCalculatorService {
         WEIGHT_VISUAL = ANIME_WEIGHTS.getOrDefault("visual", 0.20);
         WEIGHT_ATMOSPHERE = ANIME_WEIGHTS.getOrDefault("atmosphere", 0.20);
         WEIGHT_LOVE = ANIME_WEIGHTS.getOrDefault("love", 0.15);
-        System.out.println("当前权重: " + ANIME_WEIGHTS);
+        System.out.println("[Score]      当前权重: " + ANIME_WEIGHTS);
     }
 
     public ScoreCalculatorService() {
@@ -75,7 +75,7 @@ public class ScoreCalculatorService {
         valLove = fixLowScore(love, valLove);
         // 3. 计算五维加权总分 (满分约90分)
         double performanceScore = valStory * WEIGHT_STORY + valCharacter * WEIGHT_CHARACTER + valVisual * WEIGHT_VISUAL + valAtmosphere * WEIGHT_ATMOSPHERE + valLove * WEIGHT_LOVE;
-        if (story < 3.0 || character < 3.0 || visual < 3.0 || atmosphere < 3.0 || love < 3.0) {
+        if (story < 3.5 || character < 3.5 || visual < 3.5 || atmosphere < 3.5 || love < 3.5) {
             performanceScore *= 0.8;
         }
         // 4. 计算信息量得分 (满分15分)
@@ -112,25 +112,25 @@ public class ScoreCalculatorService {
             comment = "不得不看的杰出之作";
             temp = (totalScore - 90) / 10 + 8.0;
             advice = "bangumi-" + String.format("%.3f", temp);
-        } else if (totalScore >= 75) {
+        } else if (totalScore >= 80) {
             grade = "★★★★☆";
             comment = "值得一看的优秀之作";
-            temp = (totalScore - 75) / 15 + 7.0;
+            temp = (totalScore - 80) / 10 + 7.0;
             advice = "bangumi-" + String.format("%.3f", temp);
-        } else if (totalScore >= 60) {
+        } else if (totalScore >= 65) {
             grade = "★★★☆☆";
             comment = "可以去看的不错之作";
-            temp = (totalScore - 60) / 15 + 6.0;
+            temp = (totalScore - 65) / 15 + 6.0;
             advice = "bangumi-" + String.format("%.3f", temp);
-        } else if (totalScore >= 48) {
+        } else if (totalScore >= 50) {
             grade = "★★☆☆☆";
             comment = "随便看看的平庸之作";
-            temp = (totalScore - 48) / 12 + 5.0;
+            temp = (totalScore - 50) / 15 + 5.0;
             advice = "bangumi-" + String.format("%.3f", temp);
         } else if (totalScore >= 32) {
             grade = "★☆☆☆☆";
             comment = "勉强能看的瑕疵之作";
-            temp = (totalScore - 32) / 16 + 4.0;
+            temp = (totalScore - 32) / 18 + 4.0;
             advice = "bangumi-" + String.format("%.3f", temp);
         } else if (totalScore >= 24) {
             grade = "☆☆☆☆☆";
@@ -219,13 +219,13 @@ public class ScoreCalculatorService {
             } else if (rating >= 8) {
                 num = 90 + (rating - 8.0) * 10;
             } else if (rating >= 7) {
-                num = 75 + (rating - 7.0) * 15;
+                num = 80 + (rating - 7.0) * 10;
             } else if (rating >= 6) {
-                num = 60 + (rating - 6.0) * 15;
+                num = 65 + (rating - 6.0) * 15;
             } else if (rating >= 5) {
-                num = 48 + (rating - 5.0) * 12;
+                num = 50 + (rating - 5.0) * 15;
             } else if (rating >= 4) {
-                num = 32 + (rating - 4.0) * 16;
+                num = 32 + (rating - 4.0) * 18;
             } else if (rating >= 3) {
                 num = 24 + (rating - 3.0) * 8;
             } else {
@@ -331,11 +331,17 @@ public class ScoreCalculatorService {
         if (score < 2.0) {
             valscore *= 0.5;
         }
-        else if (score < 2.5) {
+        else if (score < 3.0) {
             valscore *= 0.6;
         }
-        else if (score < 3.0) {
+        else if (score < 3.5) {
             valscore *= 0.7;
+        }
+        else if (score < 4.0) {
+            valscore *= 0.8;
+        }
+        else if (score < 5.0) {
+            valscore *= 0.9;
         }
         return valscore;
     }
